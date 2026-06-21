@@ -1,0 +1,45 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+main
+
+# Go workspace
+go.work
+go.work.sum
+
+# Go module files (uncomment if you want to exclude them)
+# go.mod
+# go.sum
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.cover
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Build
+/bin/
+/dist/
+/build/
+
+# Vendor (if not using modules)
+# vendor/

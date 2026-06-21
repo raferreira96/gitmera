@@ -1,0 +1,255 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"gitmera/pkg/config"
+	"gitmera/pkg/git"
+	"gitmera/pkg/runner"
+	"gitmera/pkg/ui"
+
+	"github.com/spf13/cobra"
+)
+
+var (
+	pushConcurrency int
+	pushTimeout     time.Duration
+)
+
+var pushCmd = &cobra.Command{
+	Use:          "push",
+	Short:        "Smart-push the current branch concurrently across all configured repositories",
+	Long:         `Reads the workspace configuration and concurrently pushes the current branch to origin in every child repository, skipping repositories that are already up-to-date or behind/diverged, and auto-configuring upstream tracking for branches that don't have it yet.`,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		logger := ui.NewSafeLogger(cmd.OutOrStdout(), noColor)
+
+		configPath, err := resolveConfigPath(cfgFile)
+		if err != nil {
+			return err
+		}
+
+		f, err := os.Open(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to open configuration file %q: %w", configPath, err)
+		}
+		defer f.Close()
+
+		cfg, err := config.Load(f)
+		if err != nil {
+			return fmt.Errorf("invalid configuration file %q: %w", configPath, err)
+		}
+
+		// Resolve concurrency
+		concurrency := 5
+		if cmd.Flags().Changed("concurrency") {
+			concurrency = pushConcurrency
+		} else if cfg.Concurrency != nil {
+			concurrency = *cfg.Concurrency
+		}
+
+		if concurrency < 1 {
+			return fmt.Errorf("concurrency must be a positive integer greater than or equal to 1, got %d", concurrency)
+		}
+
+		// Resolve individual timeout
+		timeout := 2 * time.Minute
+		if cmd.Flags().Changed("timeout") {
+			timeout = pushTimeout
+		} else if cfg.Timeout != nil {
+			parsed, _ := time.ParseDuration(*cfg.Timeout)
+			timeout = parsed
+		}
+
+		// Proportional timeout with 10-minute ceiling by default
+		globalTimeout := 5 * timeout
+		if globalTimeout > 10*time.Minute {
+			globalTimeout = 10 * time.Minute
+		}
+
+		ctx, cancel := context.WithTimeout(cmd.Context(), globalTimeout)
+		defer cancel()
+
+		// Prepare tasks sorted by name for consistent log output
+		var projectNames []string
+		for name := range cfg.Projects {
+			projectNames = append(projectNames, name)
+		}
+		sort.Strings(projectNames)
+
+		var tasks []runner.RepoTask
+		for _, name := range projectNames {
+			proj := cfg.Projects[name]
+			tasks = append(tasks, runner.RepoTask{
+				Name:   name,
+				URI:    proj.Repo,
+				Path:   proj.Path,
+				Action: "push",
+			})
+		}
+
+		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
+			return pushRepo(workerCtx, task.Path)
+		}
+
+		// Push always uses the keep-going policy: repositories that are
+		// behind/diverged or otherwise fail to push must not abort the run
+		// for the remaining repositories (D-11).
+		interactive := isInteractiveMode(cmd.OutOrStdout())
+		results := ui.OrchestrateExecution(ctx, tasks, concurrency, false, timeout, action, ui.ExecutionOptions{
+			Interactive: interactive,
+			ActionLabel: "pushing",
+			Logger:      logger,
+		})
+
+		// The TUI/fallback already printed a generic status line per
+		// repository (success, skipped, cancelled) as events were
+		// dispatched. Here, at the end of the run, we additionally surface
+		// the detailed reason for safe-skipped repositories (already
+		// up-to-date, or Safe Abort due to behind/diverged remote) and the
+		// full error boxes for genuine failures (D-13, D-16).
+		hasRealError := false
+		for _, res := range results {
+			switch {
+			case res.Err != nil:
+				isCancellation := res.Err == context.Canceled || res.Err == context.DeadlineExceeded ||
+					strings.Contains(res.Err.Error(), "context canceled") ||
+					strings.Contains(res.Err.Error(), "context deadline exceeded")
+
+				if !isCancellation {
+					hasRealError = true
+					logger.LogErrorBox(res.RepoName, res.Err, res.Stderr)
+				}
+			case res.Skipped && res.Stderr != "":
+				logger.Print(fmt.Sprintf("  ↳ %s: %s\n", res.RepoName, res.Stderr))
+			}
+		}
+
+		if hasRealError || ctx.Err() != nil {
+			return fmt.Errorf("push failed: one or more repositories failed to push")
+		}
+
+		return nil
+	},
+}
+
+// pushRepo performs the Smart Push pre-check and execution logic for a
+// single repository: it determines the current branch, checks whether an
+// upstream is configured, auto-sets the upstream on first push (D-10,
+// D-12), or otherwise computes the local ahead/behind divergence and either
+// skips (in-sync), Safe Aborts (behind/diverged, D-11), or pushes (ahead).
+func pushRepo(ctx context.Context, path string) (err error, reason string, skipped bool) {
+	valid, verr := git.ValidateDestination(path)
+	if verr != nil || !valid {
+		if verr != nil {
+			return verr, "", false
+		}
+		return fmt.Errorf("destination path %q does not exist or is not a valid Git repository", path), "", false
+	}
+
+	branch, berr := currentBranch(ctx, path)
+	if berr != nil {
+		return berr, "", false
+	}
+
+	hasUpstream, uerr := hasUpstreamConfigured(ctx, path)
+	if uerr != nil {
+		return uerr, "", false
+	}
+
+	if !hasUpstream {
+		// D-10/D-12: no tracking branch configured yet — push and set the
+		// upstream to origin automatically on this first push.
+		output, perr := git.RunGitCommand(ctx, path, "push", "--set-upstream", "origin", branch)
+		if perr != nil {
+			return perr, string(output), false
+		}
+		return nil, "", false
+	}
+
+	ahead, behind, derr := aheadBehindCount(ctx, path)
+	if derr != nil {
+		return derr, "", false
+	}
+
+	if behind > 0 {
+		// D-11: Safe Abort. Never force-push; skip with a detailed warning
+		// whether behind only or fully diverged (ahead > 0 && behind > 0).
+		if ahead > 0 {
+			return nil, fmt.Sprintf("skipped: diverged from remote (ahead %d, behind %d) — manual merge/rebase required", ahead, behind), true
+		}
+		return nil, fmt.Sprintf("skipped: behind remote by %d commit(s) — pull or rebase before pushing", behind), true
+	}
+
+	if ahead == 0 {
+		// Already up-to-date: skip to avoid an unnecessary network call.
+		return nil, "skipped: already up-to-date with remote", true
+	}
+
+	output, perr := git.RunGitCommand(ctx, path, "push", "origin", branch)
+	if perr != nil {
+		return perr, string(output), false
+	}
+	return nil, "", false
+}
+
+// currentBranch resolves the name of the currently checked-out branch using
+// `git rev-parse --abbrev-ref HEAD`.
+func currentBranch(ctx context.Context, path string) (string, error) {
+	output, err := git.RunGitCommand(ctx, path, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	branch := strings.TrimSpace(string(output))
+	if branch == "" || branch == "HEAD" {
+		return "", fmt.Errorf("cannot push from a detached HEAD state")
+	}
+	return branch, nil
+}
+
+// hasUpstreamConfigured checks whether the current branch has a
+// remote-tracking branch configured via `git rev-parse --symbolic-full-name
+// @{u}` (D-09). A non-zero exit (typically 128, "no upstream configured")
+// is treated as "no upstream", not an execution error.
+func hasUpstreamConfigured(ctx context.Context, path string) (bool, error) {
+	_, err := git.RunGitCommand(ctx, path, "rev-parse", "--symbolic-full-name", "@{u}")
+	if err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// aheadBehindCount runs `git rev-list --count --left-right HEAD...@{u}` to
+// determine the exact local ahead/behind divergence count against the
+// configured upstream branch, entirely locally (D-09).
+func aheadBehindCount(ctx context.Context, path string) (ahead, behind int, err error) {
+	output, rerr := git.RunGitCommand(ctx, path, "rev-list", "--count", "--left-right", "HEAD...@{u}")
+	if rerr != nil {
+		return 0, 0, rerr
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(output)))
+	if len(fields) != 2 {
+		return 0, 0, fmt.Errorf("unexpected rev-list output: %q", string(output))
+	}
+
+	ahead, errA := strconv.Atoi(fields[0])
+	behind, errB := strconv.Atoi(fields[1])
+	if errA != nil || errB != nil {
+		return 0, 0, fmt.Errorf("failed to parse rev-list ahead/behind counts: %q", string(output))
+	}
+
+	return ahead, behind, nil
+}
+
+func init() {
+	pushCmd.Flags().IntVarP(&pushConcurrency, "concurrency", "j", 5, "Maximum number of concurrent push operations")
+	pushCmd.Flags().DurationVar(&pushTimeout, "timeout", 2*time.Minute, "Timeout for each individual push operation")
+	rootCmd.AddCommand(pushCmd)
+}
