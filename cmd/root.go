@@ -19,12 +19,14 @@ var (
 	noColor        bool
 	nonInteractive bool
 	plain          bool
+	version        = "dev"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "gitmera",
-	Short: "Gitmera is a high-performance CLI orchestrator for multiple Git repositories.",
-	Long:  `A concurrent Git subprocess wrapper that allows you to run Git commands across multiple repositories simultaneously.`,
+	Use:     "gitmera",
+	Short:   "Gitmera is a high-performance CLI orchestrator for multiple Git repositories.",
+	Long:    `A concurrent Git subprocess wrapper that allows you to run Git commands across multiple repositories simultaneously.`,
+	Version: version,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := resolveConfigPath(cfgFile)
 		if err != nil {
