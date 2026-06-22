@@ -73,6 +73,31 @@ func TestLoad_PathTraversalProtection(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsRemoteHelperTransportSyntax(t *testing.T) {
+	tests := []struct {
+		name string
+		repo string
+	}{
+		{"ext transport with shell command", "ext::sh -c touch /tmp/pwned"},
+		{"fd transport", "fd::0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Config{
+				Version: "1",
+				Projects: map[string]config.ProjectConfig{
+					"bad": {Repo: tt.repo, Path: "./bad"},
+				},
+			}
+			err := cfg.Validate()
+			if err == nil {
+				t.Errorf("expected invalid Git URI error for repo %q, got nil", tt.repo)
+			}
+		})
+	}
+}
+
 func TestLoad_ConcurrencyAndTimeout(t *testing.T) {
 	tests := []struct {
 		name        string

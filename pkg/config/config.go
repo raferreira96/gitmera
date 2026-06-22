@@ -31,8 +31,11 @@ type Config struct {
 
 // gitURIRegex validates that a repo URI matches one of the supported
 // protocols (http, https, git, ssh, file) or the SCP-like shorthand syntax
-// (e.g. git@github.com:org/repo.git).
-var gitURIRegex = regexp.MustCompile(`^(https?|git|ssh|file)://.+|^(git@|.+@)?[a-zA-Z0-9.-]+:.+$`)
+// (e.g. git@github.com:org/repo.git). The SCP-like alternative requires a
+// single colon (not a remote-helper "transport::address" double colon, e.g.
+// "ext::sh -c ..." or "fd::0"), which would otherwise let a config file
+// invoke arbitrary git remote-helper transports.
+var gitURIRegex = regexp.MustCompile(`^(https?|git|ssh|file)://.+|^(git@|.+@)?[a-zA-Z0-9.-]+:[^:].*$`)
 
 // Load parses and strictly validates a .gitmera.yaml configuration document
 // from r. Unknown fields cause an immediate decode error (KnownFields), and
