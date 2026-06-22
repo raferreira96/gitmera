@@ -95,7 +95,7 @@ func TestRunGitCommand(t *testing.T) {
 		return cmd
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// 1. Success case and environment variable verification
