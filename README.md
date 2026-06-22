@@ -31,7 +31,7 @@ Gitmera allows you to execute Git commands across multiple repositories in paral
 
 ### Binary Releases
 
-Download the latest release for your platform from the [Releases](https://github.com/your-org/gitmera/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/raferreira96/gitmera/releases) page.
 
 ### Build from Source
 
