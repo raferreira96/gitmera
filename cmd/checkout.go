@@ -3,12 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
-	"sort"
 	"strings"
 	"time"
 
-	"gitmera/pkg/config"
 	"gitmera/pkg/git"
 	"gitmera/pkg/runner"
 	"gitmera/pkg/ui"
@@ -32,69 +29,11 @@ var checkoutCmd = &cobra.Command{
 		branch := args[0]
 		logger := ui.NewSafeLogger(cmd.OutOrStdout(), noColor)
 
-		configPath, err := resolveConfigPath(cfgFile)
+		setup, err := setupCommand(cmd, checkoutConcurrency, checkoutTimeout, "checkout")
 		if err != nil {
 			return err
 		}
-
-		f, err := os.Open(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to open configuration file %q: %w", configPath, err)
-		}
-		defer f.Close()
-
-		cfg, err := config.Load(f)
-		if err != nil {
-			return fmt.Errorf("invalid configuration file %q: %w", configPath, err)
-		}
-
-		// Resolve concurrency
-		concurrency := 5
-		if cmd.Flags().Changed("concurrency") {
-			concurrency = checkoutConcurrency
-		} else if cfg.Concurrency != nil {
-			concurrency = *cfg.Concurrency
-		}
-
-		if concurrency < 1 {
-			return fmt.Errorf("concurrency must be a positive integer greater than or equal to 1, got %d", concurrency)
-		}
-
-		// Resolve individual timeout
-		timeout := 2 * time.Minute
-		if cmd.Flags().Changed("timeout") {
-			timeout = checkoutTimeout
-		} else if cfg.Timeout != nil {
-			parsed, _ := time.ParseDuration(*cfg.Timeout)
-			timeout = parsed
-		}
-
-		// Proportional timeout with 10-minute ceiling by default
-		globalTimeout := 5 * timeout
-		if globalTimeout > 10*time.Minute {
-			globalTimeout = 10 * time.Minute
-		}
-
-		ctx, cancel := context.WithTimeout(cmd.Context(), globalTimeout)
-		defer cancel()
-
-		// Prepare tasks sorted by name for consistent log output
-		var projectNames []string
-		for name := range cfg.Projects {
-			projectNames = append(projectNames, name)
-		}
-		sort.Strings(projectNames)
-
-		var tasks []runner.RepoTask
-		for _, name := range projectNames {
-			proj := cfg.Projects[name]
-			tasks = append(tasks, runner.RepoTask{
-				Name:   name,
-				URI:    proj.Repo,
-				Path:   proj.Path,
-				Action: "checkout",
-			})
-		}
+		defer setup.cancel()
 
 		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
 			return checkoutRepo(workerCtx, task.Path, branch, checkoutCreate)
@@ -104,7 +43,7 @@ var checkoutCmd = &cobra.Command{
 		// with uncommitted local changes (or any other failure) must be
 		// safely skipped without aborting checkout on the remaining repos.
 		interactive := isInteractiveMode(cmd.OutOrStdout())
-		results := ui.OrchestrateExecution(ctx, tasks, concurrency, false, timeout, action, ui.ExecutionOptions{
+		results := ui.OrchestrateExecution(setup.ctx, setup.tasks, setup.concurrency, false, setup.timeout, action, ui.ExecutionOptions{
 			Interactive: interactive,
 			ActionLabel: "checking out " + branch,
 			Logger:      logger,
@@ -116,26 +55,7 @@ var checkoutCmd = &cobra.Command{
 		// the detailed reason for safe-skipped repositories (e.g. Safe
 		// Switch fallback message) and the full error boxes for genuine
 		// failures (D-13).
-		hasRealError := false
-		for _, res := range results {
-			switch {
-			case res.Err != nil:
-				isCancellation := res.Err == context.Canceled || res.Err == context.DeadlineExceeded ||
-					strings.Contains(res.Err.Error(), "context canceled") ||
-					strings.Contains(res.Err.Error(), "context deadline exceeded")
-
-				if !isCancellation {
-					hasRealError = true
-					logger.LogErrorBox(res.RepoName, res.Err, res.Stderr)
-				}
-			case res.Skipped && res.Stderr != "":
-				// Stderr carries the detailed Safe Switch reason: print it
-				// alongside the generic warning line already shown.
-				logger.Print(fmt.Sprintf("  ↳ %s: %s\n", res.RepoName, res.Stderr))
-			}
-		}
-
-		if hasRealError || ctx.Err() != nil {
+		if reportResults(results, logger) || setup.ctx.Err() != nil {
 			return fmt.Errorf("checkout failed: one or more repositories failed to checkout %q", branch)
 		}
 

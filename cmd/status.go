@@ -4,14 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"gitmera/pkg/config"
 	"gitmera/pkg/git"
 	"gitmera/pkg/runner"
 	"gitmera/pkg/ui"
@@ -47,71 +44,13 @@ var statusCmd = &cobra.Command{
 	Long:         `Reads the workspace configuration and concurrently checks git status in all child repositories, displaying a colorized table summarizing branch, modification, and ahead/behind divergence state.`,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, err := resolveConfigPath(cfgFile)
+		setup, err := setupCommand(cmd, statusConcurrency, statusTimeout, "status")
 		if err != nil {
 			return err
 		}
+		defer setup.cancel()
 
-		f, err := os.Open(configPath)
-		if err != nil {
-			return fmt.Errorf("failed to open configuration file %q: %w", configPath, err)
-		}
-		defer f.Close()
-
-		cfg, err := config.Load(f)
-		if err != nil {
-			return fmt.Errorf("invalid configuration file %q: %w", configPath, err)
-		}
-
-		// Resolve concurrency
-		concurrency := 5
-		if cmd.Flags().Changed("concurrency") {
-			concurrency = statusConcurrency
-		} else if cfg.Concurrency != nil {
-			concurrency = *cfg.Concurrency
-		}
-
-		if concurrency < 1 {
-			return fmt.Errorf("concurrency must be a positive integer greater than or equal to 1, got %d", concurrency)
-		}
-
-		// Resolve individual timeout
-		timeout := 2 * time.Minute
-		if cmd.Flags().Changed("timeout") {
-			timeout = statusTimeout
-		} else if cfg.Timeout != nil {
-			parsed, _ := time.ParseDuration(*cfg.Timeout)
-			timeout = parsed
-		}
-
-		// Proportional timeout with 10-minute ceiling by default
-		globalTimeout := 5 * timeout
-		if globalTimeout > 10*time.Minute {
-			globalTimeout = 10 * time.Minute
-		}
-
-		ctx, cancel := context.WithTimeout(cmd.Context(), globalTimeout)
-		defer cancel()
-
-		// Prepare tasks sorted by name for consistent table output
-		var projectNames []string
-		for name := range cfg.Projects {
-			projectNames = append(projectNames, name)
-		}
-		sort.Strings(projectNames)
-
-		var tasks []runner.RepoTask
-		for _, name := range projectNames {
-			proj := cfg.Projects[name]
-			tasks = append(tasks, runner.RepoTask{
-				Name:   name,
-				URI:    proj.Repo,
-				Path:   proj.Path,
-				Action: "status",
-			})
-		}
-
-		statuses := make(map[string]repoStatus, len(tasks))
+		statuses := make(map[string]repoStatus, len(setup.tasks))
 		var statusMu sync.Mutex
 
 		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
@@ -125,12 +64,12 @@ var statusCmd = &cobra.Command{
 		// Status always uses the keep-going policy: every repository should
 		// be inspected regardless of individual failures (fail-fast is
 		// never appropriate for a read-only summary command).
-		runner.ExecuteTasks(ctx, tasks, concurrency, false, timeout, action, nil)
+		runner.ExecuteTasks(setup.ctx, setup.tasks, setup.concurrency, false, setup.timeout, action, nil)
 
-		// Render results in the same sorted order as projectNames.
-		ordered := make([]repoStatus, 0, len(projectNames))
-		for _, name := range projectNames {
-			ordered = append(ordered, statuses[name])
+		// Render results in the same sorted order as setup.tasks.
+		ordered := make([]repoStatus, 0, len(setup.tasks))
+		for _, task := range setup.tasks {
+			ordered = append(ordered, statuses[task.Name])
 		}
 
 		var tableBuf strings.Builder
