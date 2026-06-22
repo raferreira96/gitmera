@@ -17,7 +17,13 @@ type ExecCommandFunc func(ctx context.Context, name string, args ...string) *exe
 // packages outside pkg/git (such as cmd) to exercise RunGitCommand-based
 // logic without touching the real filesystem or network.
 func SetExecCommandForTest(fn ExecCommandFunc) (restore func()) {
+	execCommandMu.Lock()
 	prev := execCommand
 	execCommand = fn
-	return func() { execCommand = prev }
+	execCommandMu.Unlock()
+	return func() {
+		execCommandMu.Lock()
+		execCommand = prev
+		execCommandMu.Unlock()
+	}
 }

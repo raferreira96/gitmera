@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -147,6 +148,43 @@ func TestRunGitCommand_PreservesContextDeadlineExceeded(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected errors.Is(err, context.DeadlineExceeded) to be true, got err=%v", err)
 	}
+}
+
+func TestExecCommandOverride_ConcurrentAccess(t *testing.T) {
+	oldExec := execCommand
+	defer func() { execCommand = oldExec }()
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				restore := SetExecCommandForTest(oldExec)
+				restore()
+			}
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = RunGitCommand(ctx, "", "status")
+		}()
+	}
+
+	time.Sleep(150 * time.Millisecond)
+	close(stop)
+	wg.Wait()
 }
 
 func TestHelperProcess(t *testing.T) {

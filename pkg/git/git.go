@@ -7,11 +7,23 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sync"
 )
 
 // execCommand is a package-level variable that wraps exec.CommandContext,
-// allowing tests to mock subprocess execution.
-var execCommand = exec.CommandContext
+// allowing tests to mock subprocess execution. Guarded by execCommandMu since
+// it is read concurrently by every in-flight RunGitCommand call and written
+// by SetExecCommandForTest.
+var (
+	execCommandMu sync.RWMutex
+	execCommand   = exec.CommandContext
+)
+
+func getExecCommand() ExecCommandFunc {
+	execCommandMu.RLock()
+	defer execCommandMu.RUnlock()
+	return execCommand
+}
 
 // tokenRegex matches HTTPS credentials/tokens in git URLs.
 var tokenRegex = regexp.MustCompile(`(https?://)([^@\s]+)@`)
@@ -63,7 +75,7 @@ func ValidateDestination(path string) (bool, error) {
 // It configures environment variables to bypass interactive prompts and uses context control to enforce timeouts.
 // Returns the sanitized combined stdout/stderr output and any sanitized execution error.
 func RunGitCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmd := execCommand(ctx, "git", args...)
+	cmd := getExecCommand()(ctx, "git", args...)
 	cmd.Dir = dir
 
 	if len(cmd.Env) == 0 {
