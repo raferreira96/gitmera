@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -123,6 +124,31 @@ func TestRunGitCommand(t *testing.T) {
 	}
 }
 
+func TestRunGitCommand_PreservesContextDeadlineExceeded(t *testing.T) {
+	oldExec := execCommand
+	defer func() { execCommand = oldExec }()
+
+	execCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cmd := oldExec(ctx, os.Args[0], append([]string{"-test.run=TestHelperProcess", "--"}, args...)...)
+		cmd.Env = append(os.Environ(),
+			"GO_WANT_HELPER_PROCESS=1",
+			"MOCK_COMMAND_NAME="+name,
+		)
+		return cmd
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := RunGitCommand(ctx, "", "sleep")
+	if err == nil {
+		t.Fatal("expected error due to context deadline, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected errors.Is(err, context.DeadlineExceeded) to be true, got err=%v", err)
+	}
+}
+
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 		return
@@ -173,6 +199,9 @@ func TestHelperProcess(t *testing.T) {
 	case "fail-cmd":
 		fmt.Fprintf(os.Stderr, "fatal: error with token https://secret-token-123@github.com/org/repo.git\n")
 		os.Exit(128)
+	case "sleep":
+		time.Sleep(2 * time.Second)
+		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown subcommand %q\n", subCmd)
 		os.Exit(1)

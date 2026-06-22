@@ -78,8 +78,13 @@ func RunGitCommand(ctx context.Context, dir string, args ...string) ([]byte, err
 	sanitizedOutput := Sanitize(string(output))
 
 	if err != nil {
-		safeErr := fmt.Errorf("git command failed: %s", Sanitize(err.Error()))
-		return []byte(sanitizedOutput), safeErr
+		// exec.Cmd's Wait error (e.g. "signal: killed") does not itself wrap
+		// the context error, so it must be checked separately to make
+		// errors.Is(err, context.Canceled/DeadlineExceeded) work for callers.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return []byte(sanitizedOutput), fmt.Errorf("git command failed: %s: %w", Sanitize(err.Error()), ctxErr)
+		}
+		return []byte(sanitizedOutput), fmt.Errorf("git command failed: %s: %w", Sanitize(err.Error()), err)
 	}
 
 	return []byte(sanitizedOutput), nil
