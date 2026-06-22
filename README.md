@@ -115,6 +115,7 @@ gitmera [command]
 | `gitmera checkout` | Checkout branches across all repos |
 | `gitmera push` | Push changes to remote |
 | `gitmera status` | Show status of all repositories |
+| `gitmera update` | Update gitmera to the latest GitHub release |
 
 ## Configuration
 
