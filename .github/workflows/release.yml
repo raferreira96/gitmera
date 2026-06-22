@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test ./... -race
+
+      - name: Install svu
+        run: go install github.com/caarlos0/svu/v3@v3.4.1
+
+      - name: Compute next version
+        id: version
+        run: |
+          current="$(git tag --sort=-v:refname | head -n1)"
+          next="$(svu next)"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          if [[ "$next" == "$current" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No version-impacting commits since ${current:-the start of history}; skipping release."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Next version: $next"
+          fi
+
+      - name: Create and push tag
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          git tag "${{ steps.version.outputs.next }}"
+          git push origin "${{ steps.version.outputs.next }}"
+
+      - name: Run GoReleaser
+        if: steps.version.outputs.skip != 'true'
+        uses: goreleaser/goreleaser-action@v7.2.2
+        with:
+          version: 2.16.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
