@@ -12,10 +12,13 @@ import (
 
 // RepoTask represents a single repository target and the action to perform on it.
 type RepoTask struct {
-	Name   string
-	URI    string
-	Path   string
-	Action string // e.g. "clone", "pull"
+	Name string
+	URI  string
+	Path string
+	// Action is the verb being performed: one of "clone", "pull", "push",
+	// "checkout", or "status". It is informational only — the runner does
+	// not branch on it; the caller-supplied TaskActionFunc does.
+	Action string
 }
 
 // TaskResult holds the execution outcome for a specific repository.

@@ -14,9 +14,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// nonInteractive is declared as a global persistent flag in root.go and
-// shared across all subcommands (D-07); init reuses it to skip its
-// interactive wizard prompts.
+// force, when set via --force/-f, skips the overwrite confirmation prompt
+// (or, in --non-interactive mode, the abort) when the target config file
+// already exists.
 var force bool
 
 // defaultConfigPath is the filename created by `gitmera init` when no
