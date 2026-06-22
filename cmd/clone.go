@@ -34,11 +34,11 @@ var cloneCmd = &cobra.Command{
 
 		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
 			// Validate destination path
-			skip, err := git.ValidateDestination(task.Path)
+			alreadyCloned, err := git.ValidateDestination(task.Path)
 			if err != nil {
 				return err, "", false
 			}
-			if skip {
+			if alreadyCloned {
 				return nil, "", true
 			}
 

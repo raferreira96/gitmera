@@ -71,8 +71,8 @@ var checkoutCmd = &cobra.Command{
 // upstream tracking is configured here (D-08); that is deferred to the
 // first push.
 func checkoutRepo(ctx context.Context, path, branch string, create bool) (err error, warning string, skipped bool) {
-	valid, verr := git.ValidateDestination(path)
-	if verr != nil || !valid {
+	alreadyCloned, verr := git.ValidateDestination(path)
+	if verr != nil || !alreadyCloned {
 		if verr != nil {
 			return verr, "", false
 		}

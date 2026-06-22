@@ -99,8 +99,8 @@ func init() {
 func collectRepoStatus(ctx context.Context, name, path string, doFetch bool) repoStatus {
 	rs := repoStatus{Name: name}
 
-	valid, err := git.ValidateDestination(path)
-	if err != nil || !valid {
+	alreadyCloned, err := git.ValidateDestination(path)
+	if err != nil || !alreadyCloned {
 		rs.Status = "Missing"
 		rs.Err = err
 		return rs

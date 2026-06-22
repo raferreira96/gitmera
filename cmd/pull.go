@@ -33,12 +33,12 @@ var pullCmd = &cobra.Command{
 		defer setup.cancel()
 
 		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
-			// Validate destination path (must be a valid git repo)
-			valid, err := git.ValidateDestination(task.Path)
+			// Validate destination path (must already be a cloned git repo)
+			alreadyCloned, err := git.ValidateDestination(task.Path)
 			if err != nil {
 				return err, "", false
 			}
-			if !valid {
+			if !alreadyCloned {
 				return fmt.Errorf("destination path %q does not exist or is not a valid Git repository", task.Path), "", false
 			}
 

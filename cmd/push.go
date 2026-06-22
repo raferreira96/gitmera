@@ -67,8 +67,8 @@ var pushCmd = &cobra.Command{
 // D-12), or otherwise computes the local ahead/behind divergence and either
 // skips (in-sync), Safe Aborts (behind/diverged, D-11), or pushes (ahead).
 func pushRepo(ctx context.Context, path string) (err error, reason string, skipped bool) {
-	valid, verr := git.ValidateDestination(path)
-	if verr != nil || !valid {
+	alreadyCloned, verr := git.ValidateDestination(path)
+	if verr != nil || !alreadyCloned {
 		if verr != nil {
 			return verr, "", false
 		}
