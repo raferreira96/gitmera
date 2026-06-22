@@ -25,7 +25,7 @@ Gitmera allows you to execute Git commands across multiple repositories in paral
 - **Interactive TUI** — Real-time progress visualization with Bubble Tea
 - **Non-Interactive Mode** — CI/CD friendly with plain sequential logs
 - **Smart Configuration** — Auto-discovers `.gitmera.yaml` in the current directory
-- **Cross-Platform** — Supports macOS, Linux, and Windows
+- **Cross-Platform** — Supports macOS and Linux
 
 ## Installation
 

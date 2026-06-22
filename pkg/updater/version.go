@@ -61,13 +61,8 @@ func parseVersion(v string) []int {
 
 // AssetName builds the GoReleaser archive filename for version (with or
 // without a leading "v") on the given platform, matching the name_template
-// in .goreleaser.yaml: gitmera_{version}_{goos}_{goarch}.tar.gz, or .zip on
-// windows.
+// in .goreleaser.yaml: gitmera_{version}_{goos}_{goarch}.tar.gz.
 func AssetName(version, goos, goarch string) string {
 	version = strings.TrimPrefix(version, "v")
-	ext := "tar.gz"
-	if goos == "windows" {
-		ext = "zip"
-	}
-	return fmt.Sprintf("gitmera_%s_%s_%s.%s", version, goos, goarch, ext)
+	return fmt.Sprintf("gitmera_%s_%s_%s.tar.gz", version, goos, goarch)
 }

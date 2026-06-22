@@ -3,7 +3,6 @@ package updater
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 )
 
@@ -27,14 +26,12 @@ func TestReplace(t *testing.T) {
 		t.Errorf("content = %q, want %q", got, "new-content")
 	}
 
-	if runtime.GOOS != "windows" {
-		info, err := os.Stat(targetPath)
-		if err != nil {
-			t.Fatalf("failed to stat replaced binary: %v", err)
-		}
-		if info.Mode().Perm()&0100 == 0 {
-			t.Errorf("expected replaced binary to be executable, got mode %v", info.Mode())
-		}
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		t.Fatalf("failed to stat replaced binary: %v", err)
+	}
+	if info.Mode().Perm()&0100 == 0 {
+		t.Errorf("expected replaced binary to be executable, got mode %v", info.Mode())
 	}
 }
 

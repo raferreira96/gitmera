@@ -92,12 +92,8 @@ func TestUpdateCmd_AlreadyUpToDate(t *testing.T) {
 }
 
 func TestUpdateCmd_PerformsUpdate(t *testing.T) {
-	binaryName := "gitmera"
-	if runtime.GOOS == "windows" {
-		binaryName = "gitmera.exe"
-	}
 	assetName := updater.AssetName("v0.6.0", runtime.GOOS, runtime.GOARCH)
-	archive := buildTestArchive(t, binaryName, []byte("new-binary-content"))
+	archive := buildTestArchive(t, "gitmera", []byte("new-binary-content"))
 
 	sum := sha256.Sum256(archive)
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), assetName))
