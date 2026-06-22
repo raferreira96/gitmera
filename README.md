@@ -29,6 +29,20 @@ Gitmera allows you to execute Git commands across multiple repositories in paral
 
 ## Installation
 
+### Quick Install (Linux & macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raferreira96/gitmera/main/install.sh | sh
+```
+
+Or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/raferreira96/gitmera/main/install.sh | sh
+```
+
+This installs gitmera into `~/.gitmera/bin` and adds it to your `PATH` in `~/.bashrc`, `~/.zshrc`, and/or `~/.profile` (whichever already exist). Open a new terminal afterward, or `source` the relevant file, for `gitmera` to be available.
+
 ### Binary Releases
 
 Download the latest release for your platform from the [Releases](https://github.com/raferreira96/gitmera/releases) page.
