@@ -371,6 +371,28 @@ func TestRenderStatusTable_Alignment(t *testing.T) {
 	}
 }
 
+func TestRenderMissingDetails_SurfacesUnderlyingError(t *testing.T) {
+	statuses := []repoStatus{
+		{Name: "clean-repo", Status: "Clean"},
+		{Name: "broken-repo", Status: "Missing", Err: fmt.Errorf("destination path %q exists but is not a valid Git repository (missing .git directory)", "/tmp/broken-repo")},
+		{Name: "plain-missing", Status: "Missing"}, // Err is nil: path simply doesn't exist
+	}
+
+	var buf bytes.Buffer
+	renderMissingDetails(&buf, statuses)
+
+	out := buf.String()
+	if !strings.Contains(out, "broken-repo") || !strings.Contains(out, "missing .git directory") {
+		t.Errorf("expected a detail line surfacing broken-repo's specific error, got %q", out)
+	}
+	if strings.Contains(out, "plain-missing") {
+		t.Errorf("expected no detail line for a Missing repo with a nil Err, got %q", out)
+	}
+	if strings.Contains(out, "clean-repo") {
+		t.Errorf("expected no detail line for a Clean repo, got %q", out)
+	}
+}
+
 func TestPadRight_UsesVisualWidth(t *testing.T) {
 	// Confirms padRight measures visual (ANSI-aware) width via
 	// lipgloss.Width rather than raw byte length, so styled strings still

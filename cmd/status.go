@@ -74,6 +74,7 @@ var statusCmd = &cobra.Command{
 
 		var tableBuf strings.Builder
 		renderStatusTable(&tableBuf, ordered)
+		renderMissingDetails(&tableBuf, ordered)
 
 		// Route through SafeLogger so --no-color and non-TTY output
 		// streams are honored consistently with clone/pull/init (it
@@ -281,6 +282,19 @@ func renderStatusTable(w io.Writer, statuses []repoStatus) {
 	}
 
 	fmt.Fprint(w, sb.String())
+}
+
+// renderMissingDetails writes a detail line for each Missing repository that
+// carries a specific underlying error (e.g. exists but isn't a valid Git
+// repository, or the git status command itself failed), surfacing the
+// reason instead of silently dropping it. Repositories that are Missing
+// simply because the path doesn't exist at all carry no Err and are skipped.
+func renderMissingDetails(w io.Writer, statuses []repoStatus) {
+	for _, rs := range statuses {
+		if rs.Status == "Missing" && rs.Err != nil {
+			fmt.Fprintf(w, "  ↳ %s: %s\n", rs.Name, rs.Err.Error())
+		}
+	}
 }
 
 // padRight right-pads str with spaces until it reaches the target visual
