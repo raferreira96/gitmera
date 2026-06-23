@@ -23,10 +23,12 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:     "gitmera",
-	Short:   "Gitmera is a high-performance CLI orchestrator for multiple Git repositories.",
-	Long:    `A concurrent Git subprocess wrapper that allows you to run Git commands across multiple repositories simultaneously.`,
-	Version: version,
+	Use:           "gitmera",
+	Short:         "Gitmera is a high-performance CLI orchestrator for multiple Git repositories.",
+	Long:          `A concurrent Git subprocess wrapper that allows you to run Git commands across multiple repositories simultaneously.`,
+	Version:       version,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := resolveConfigPath(cfgFile)
 		if err != nil {
@@ -37,13 +39,13 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to open configuration file %q: %w", path, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		if _, err := config.Load(f); err != nil {
 			return fmt.Errorf("invalid configuration file %q: %w", path, err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Found and validated configuration file: %s\n", path)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found and validated configuration file: %s\n", path)
 		return nil
 	},
 }

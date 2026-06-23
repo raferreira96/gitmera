@@ -92,12 +92,8 @@ func TestUpdateCmd_AlreadyUpToDate(t *testing.T) {
 }
 
 func TestUpdateCmd_PerformsUpdate(t *testing.T) {
-	binaryName := "gitmera"
-	if runtime.GOOS == "windows" {
-		binaryName = "gitmera.exe"
-	}
 	assetName := updater.AssetName("v0.6.0", runtime.GOOS, runtime.GOARCH)
-	archive := buildTestArchive(t, binaryName, []byte("new-binary-content"))
+	archive := buildTestArchive(t, "gitmera", []byte("new-binary-content"))
 
 	sum := sha256.Sum256(archive)
 	checksums := []byte(fmt.Sprintf("%s  %s\n", hex.EncodeToString(sum[:]), assetName))
@@ -106,7 +102,7 @@ func TestUpdateCmd_PerformsUpdate(t *testing.T) {
 	var server *httptest.Server
 	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"tag_name": "v0.6.0", "assets": [
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v0.6.0", "assets": [
 			{"name": %q, "browser_download_url": %q},
 			{"name": "checksums.txt", "browser_download_url": %q}
 		]}`, assetName, server.URL+"/assets/"+assetName, server.URL+"/assets/checksums.txt")

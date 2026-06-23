@@ -70,7 +70,7 @@ func loadConfig(configPath string) (*config.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open configuration file %q: %w", configPath, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	cfg, err := config.Load(f)
 	if err != nil {

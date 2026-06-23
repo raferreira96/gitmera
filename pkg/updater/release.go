@@ -37,7 +37,7 @@ func FetchLatestRelease(ctx context.Context, client *http.Client, baseURL string
 	if err != nil {
 		return Release{}, fmt.Errorf("failed to fetch latest release from %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return Release{}, fmt.Errorf("unexpected status %d fetching latest release from %s", resp.StatusCode, url)

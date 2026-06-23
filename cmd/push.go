@@ -33,7 +33,7 @@ var pushCmd = &cobra.Command{
 		}
 		defer setup.cancel()
 
-		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
+		action := func(workerCtx context.Context, task runner.RepoTask) (string, bool, error) {
 			return pushRepo(workerCtx, task.Path)
 		}
 
@@ -66,23 +66,23 @@ var pushCmd = &cobra.Command{
 // upstream is configured, auto-sets the upstream on first push (D-10,
 // D-12), or otherwise computes the local ahead/behind divergence and either
 // skips (in-sync), Safe Aborts (behind/diverged, D-11), or pushes (ahead).
-func pushRepo(ctx context.Context, path string) (err error, reason string, skipped bool) {
+func pushRepo(ctx context.Context, path string) (reason string, skipped bool, err error) {
 	alreadyCloned, verr := git.ValidateDestination(path)
 	if verr != nil || !alreadyCloned {
 		if verr != nil {
-			return verr, "", false
+			return "", false, verr
 		}
-		return fmt.Errorf("destination path %q does not exist or is not a valid Git repository", path), "", false
+		return "", false, fmt.Errorf("destination path %q does not exist or is not a valid Git repository", path)
 	}
 
 	branch, berr := currentBranch(ctx, path)
 	if berr != nil {
-		return berr, "", false
+		return "", false, berr
 	}
 
 	hasUpstream, uerr := hasUpstreamConfigured(ctx, path)
 	if uerr != nil {
-		return uerr, "", false
+		return "", false, uerr
 	}
 
 	if !hasUpstream {
@@ -90,35 +90,35 @@ func pushRepo(ctx context.Context, path string) (err error, reason string, skipp
 		// upstream to origin automatically on this first push.
 		output, perr := git.RunGitCommand(ctx, path, "push", "--set-upstream", "origin", branch)
 		if perr != nil {
-			return perr, string(output), false
+			return string(output), false, perr
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	ahead, behind, derr := aheadBehindCount(ctx, path)
 	if derr != nil {
-		return derr, "", false
+		return "", false, derr
 	}
 
 	if behind > 0 {
 		// D-11: Safe Abort. Never force-push; skip with a detailed warning
 		// whether behind only or fully diverged (ahead > 0 && behind > 0).
 		if ahead > 0 {
-			return nil, fmt.Sprintf("skipped: diverged from remote (ahead %d, behind %d) — manual merge/rebase required", ahead, behind), true
+			return fmt.Sprintf("skipped: diverged from remote (ahead %d, behind %d) — manual merge/rebase required", ahead, behind), true, nil
 		}
-		return nil, fmt.Sprintf("skipped: behind remote by %d commit(s) — pull or rebase before pushing", behind), true
+		return fmt.Sprintf("skipped: behind remote by %d commit(s) — pull or rebase before pushing", behind), true, nil
 	}
 
 	if ahead == 0 {
 		// Already up-to-date: skip to avoid an unnecessary network call.
-		return nil, "skipped: already up-to-date with remote", true
+		return "skipped: already up-to-date with remote", true, nil
 	}
 
 	output, perr := git.RunGitCommand(ctx, path, "push", "origin", branch)
 	if perr != nil {
-		return perr, string(output), false
+		return string(output), false, perr
 	}
-	return nil, "", false
+	return "", false, nil
 }
 
 // currentBranch resolves the name of the currently checked-out branch using

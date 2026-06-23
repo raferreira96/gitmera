@@ -123,7 +123,7 @@ func TestCheckoutRepo_SwitchesCleanRepo(t *testing.T) {
 		},
 	})
 
-	err, warning, skipped := checkoutRepo(context.Background(), dir, "main", false)
+	warning, skipped, err := checkoutRepo(context.Background(), dir, "main", false)
 
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -146,7 +146,7 @@ func TestCheckoutRepo_SafeFailOnTrackedChanges(t *testing.T) {
 		},
 	})
 
-	err, _, _ := checkoutRepo(context.Background(), dir, "main", false)
+	_, _, err := checkoutRepo(context.Background(), dir, "main", false)
 
 	if err == nil {
 		t.Fatal("expected an error due to uncommitted tracked changes")
@@ -166,7 +166,7 @@ func TestCheckoutRepo_UntrackedFilesDoNotBlockCheckout(t *testing.T) {
 		},
 	})
 
-	err, _, _ := checkoutRepo(context.Background(), dir, "main", false)
+	_, _, err := checkoutRepo(context.Background(), dir, "main", false)
 
 	if err != nil {
 		t.Errorf("expected untracked-only changes to not block checkout, got error: %v", err)
@@ -184,7 +184,7 @@ func TestCheckoutRepo_CreateNewBranch(t *testing.T) {
 		},
 	})
 
-	err, warning, _ := checkoutRepo(context.Background(), dir, "feature/x", true)
+	warning, _, err := checkoutRepo(context.Background(), dir, "feature/x", true)
 
 	if err != nil {
 		t.Errorf("expected no error creating new branch, got %v", err)
@@ -205,7 +205,7 @@ func TestCheckoutRepo_SafeSwitchWhenBranchAlreadyExists(t *testing.T) {
 		},
 	})
 
-	err, warning, _ := checkoutRepo(context.Background(), dir, "feature/x", true)
+	warning, _, err := checkoutRepo(context.Background(), dir, "feature/x", true)
 
 	if err != nil {
 		t.Errorf("expected Safe Switch fallback to succeed without error, got %v", err)
@@ -219,7 +219,7 @@ func TestCheckoutRepo_MissingRepoFails(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "missing-repo")
 
-	err, _, _ := checkoutRepo(context.Background(), dir, "main", false)
+	_, _, err := checkoutRepo(context.Background(), dir, "main", false)
 
 	if err == nil {
 		t.Fatal("expected an error for a missing/non-git repository")
@@ -238,7 +238,7 @@ func TestCheckoutRepo_CheckoutCommandFailureSurfacesError(t *testing.T) {
 		},
 	})
 
-	err, _, _ := checkoutRepo(context.Background(), dir, "missing-branch", false)
+	_, _, err := checkoutRepo(context.Background(), dir, "missing-branch", false)
 
 	if err == nil {
 		t.Fatal("expected an error when the underlying git checkout command fails")

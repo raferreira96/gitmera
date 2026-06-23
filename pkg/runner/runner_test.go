@@ -20,7 +20,7 @@ func TestExecuteTasks_ConcurrencyBounds(t *testing.T) {
 	var active int32
 	var maxActive int32
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		current := atomic.AddInt32(&active, 1)
 		defer atomic.AddInt32(&active, -1)
 
@@ -32,7 +32,7 @@ func TestExecuteTasks_ConcurrencyBounds(t *testing.T) {
 		}
 
 		time.Sleep(10 * time.Millisecond)
-		return nil, "", false
+		return "", false, nil
 	}
 
 	concurrency := 2
@@ -55,14 +55,14 @@ func TestExecuteTasks_KeepGoing(t *testing.T) {
 		{Name: "success2"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		if task.Name == "fail" {
-			return errors.New("failed task"), "stderr output", false
+			return "stderr output", false, errors.New("failed task")
 		}
 		if task.Name == "success2" {
-			return nil, "", true // simulate skipped
+			return "", true, nil // simulate skipped
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	results := ExecuteTasks(context.Background(), tasks, 2, false, 1*time.Second, action, nil)
@@ -114,18 +114,18 @@ func TestExecuteTasks_FailFast(t *testing.T) {
 		{Name: "slow2"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		if task.Name == "fail_instant" {
 			// Small sleep to ensure others have started/are about to start
 			time.Sleep(2 * time.Millisecond)
-			return errors.New("instant error"), "fail_instant error", false
+			return "fail_instant error", false, errors.New("instant error")
 		}
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err(), "cancelled", false
+			return "cancelled", false, ctx.Err()
 		case <-time.After(100 * time.Millisecond):
-			return nil, "", false
+			return "", false, nil
 		}
 	}
 
@@ -166,12 +166,12 @@ func TestExecuteTasks_Timeout(t *testing.T) {
 		{Name: "timeout_task"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		select {
 		case <-ctx.Done():
-			return ctx.Err(), "timeout reached", false
+			return "timeout reached", false, ctx.Err()
 		case <-time.After(100 * time.Millisecond):
-			return nil, "", false
+			return "", false, nil
 		}
 	}
 
@@ -197,11 +197,11 @@ func TestExecuteTasks_FailFast_Queued(t *testing.T) {
 		{Name: "queued1"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		if task.Name == "fail_instant" {
-			return errors.New("instant error"), "fail_instant error", false
+			return "fail_instant error", false, errors.New("instant error")
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	// Concurrency 1 means queued1 must wait until fail_instant finishes.
@@ -240,14 +240,14 @@ func TestExecuteTasks_EventEmission(t *testing.T) {
 		{Name: "skip"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		switch task.Name {
 		case "fail":
-			return errors.New("boom"), "stderr text", false
+			return "stderr text", false, errors.New("boom")
 		case "skip":
-			return nil, "", true
+			return "", true, nil
 		default:
-			return nil, "", false
+			return "", false, nil
 		}
 	}
 
@@ -338,11 +338,11 @@ func TestExecuteTasks_EventEmission_FailFastCancelled(t *testing.T) {
 		{Name: "queued2"},
 	}
 
-	action := func(ctx context.Context, task RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task RepoTask) (string, bool, error) {
 		if task.Name == "fail_instant" {
-			return errors.New("instant error"), "", false
+			return "", false, errors.New("instant error")
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	eventChan := make(chan TaskEvent, len(tasks)*2)

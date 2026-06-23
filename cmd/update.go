@@ -90,13 +90,9 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("checksum verification failed: %w", err)
 		}
 
-		binaryName := "gitmera"
-		if runtime.GOOS == "windows" {
-			binaryName = "gitmera.exe"
-		}
-		binary, err := updater.ExtractBinary(archive, assetName, binaryName)
+		binary, err := updater.ExtractBinary(archive, "gitmera")
 		if err != nil {
-			return fmt.Errorf("failed to extract %s from %s: %w", binaryName, assetName, err)
+			return fmt.Errorf("failed to extract gitmera from %s: %w", assetName, err)
 		}
 
 		targetPath, err := updateTargetPath()

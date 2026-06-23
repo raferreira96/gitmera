@@ -85,7 +85,7 @@ func (l *SafeLogger) LogSuccess(repoName, message string) {
 	checkmark := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
 	repoStyle := lipgloss.NewStyle().Bold(true).Render(repoName)
 
-	fmt.Fprintf(l.cpw, "%s %s: %s\n", checkmark, repoStyle, message)
+	_, _ = fmt.Fprintf(l.cpw, "%s %s: %s\n", checkmark, repoStyle, message)
 }
 
 // LogErrorBox prints a red-bordered error box detailing a failed operation:
@@ -111,7 +111,7 @@ func (l *SafeLogger) LogErrorBox(repoName string, err error, stderr string) {
 	content := fmt.Sprintf("%s\n%s", header, body)
 	box := borderStyle.Render(content)
 
-	fmt.Fprintln(l.cpw, box)
+	_, _ = fmt.Fprintln(l.cpw, box)
 }
 
 // Print writes a raw message to the underlying writer under the mutex lock,
@@ -119,5 +119,5 @@ func (l *SafeLogger) LogErrorBox(repoName string, err error, stderr string) {
 func (l *SafeLogger) Print(msg string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	fmt.Fprint(l.cpw, msg)
+	_, _ = fmt.Fprint(l.cpw, msg)
 }

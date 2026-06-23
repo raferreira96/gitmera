@@ -39,7 +39,6 @@ func TestAssetName(t *testing.T) {
 	}{
 		{"linux amd64 strips v prefix", "v0.2.0", "linux", "amd64", "gitmera_0.2.0_linux_amd64.tar.gz"},
 		{"darwin arm64 without v prefix", "0.2.0", "darwin", "arm64", "gitmera_0.2.0_darwin_arm64.tar.gz"},
-		{"windows uses zip extension", "v0.2.0", "windows", "amd64", "gitmera_0.2.0_windows_amd64.zip"},
 	}
 
 	for _, tt := range tests {

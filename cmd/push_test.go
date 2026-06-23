@@ -150,7 +150,7 @@ func TestPushRepo_SkipsWhenUpToDate(t *testing.T) {
 		},
 	})
 
-	err, reason, skipped := pushRepo(context.Background(), dir)
+	reason, skipped, err := pushRepo(context.Background(), dir)
 
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -175,7 +175,7 @@ func TestPushRepo_PushesWhenAhead(t *testing.T) {
 		},
 	})
 
-	err, _, skipped := pushRepo(context.Background(), dir)
+	_, skipped, err := pushRepo(context.Background(), dir)
 
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -197,7 +197,7 @@ func TestPushRepo_SafeAbortWhenBehind(t *testing.T) {
 		},
 	})
 
-	err, reason, skipped := pushRepo(context.Background(), dir)
+	reason, skipped, err := pushRepo(context.Background(), dir)
 
 	if err != nil {
 		t.Errorf("expected no error (Safe Abort is not a failure), got %v", err)
@@ -222,7 +222,7 @@ func TestPushRepo_SafeAbortWhenDiverged(t *testing.T) {
 		},
 	})
 
-	err, reason, skipped := pushRepo(context.Background(), dir)
+	reason, skipped, err := pushRepo(context.Background(), dir)
 
 	if err != nil {
 		t.Errorf("expected no error (Safe Abort is not a failure), got %v", err)
@@ -246,7 +246,7 @@ func TestPushRepo_AutoSetsUpstreamWhenMissing(t *testing.T) {
 		},
 	})
 
-	err, _, skipped := pushRepo(context.Background(), dir)
+	_, skipped, err := pushRepo(context.Background(), dir)
 
 	if err != nil {
 		t.Errorf("expected no error when auto-setting upstream, got %v", err)
@@ -260,7 +260,7 @@ func TestPushRepo_MissingRepoFails(t *testing.T) {
 	base := t.TempDir()
 	dir := filepath.Join(base, "missing-repo")
 
-	err, _, _ := pushRepo(context.Background(), dir)
+	_, _, err := pushRepo(context.Background(), dir)
 
 	if err == nil {
 		t.Fatal("expected an error for a missing/non-git repository")
@@ -281,7 +281,7 @@ func TestPushRepo_PushCommandFailureSurfacesError(t *testing.T) {
 		},
 	})
 
-	err, _, _ := pushRepo(context.Background(), dir)
+	_, _, err := pushRepo(context.Background(), dir)
 
 	if err == nil {
 		t.Fatal("expected an error when the underlying git push command fails")

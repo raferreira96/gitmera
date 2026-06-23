@@ -35,7 +35,7 @@ var checkoutCmd = &cobra.Command{
 		}
 		defer setup.cancel()
 
-		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
+		action := func(workerCtx context.Context, task runner.RepoTask) (string, bool, error) {
 			return checkoutRepo(workerCtx, task.Path, branch, checkoutCreate)
 		}
 
@@ -70,13 +70,13 @@ var checkoutCmd = &cobra.Command{
 // if -b targets a branch that already exists locally (D-06, D-07). No
 // upstream tracking is configured here (D-08); that is deferred to the
 // first push.
-func checkoutRepo(ctx context.Context, path, branch string, create bool) (err error, warning string, skipped bool) {
+func checkoutRepo(ctx context.Context, path, branch string, create bool) (warning string, skipped bool, err error) {
 	alreadyCloned, verr := git.ValidateDestination(path)
 	if verr != nil || !alreadyCloned {
 		if verr != nil {
-			return verr, "", false
+			return "", false, verr
 		}
-		return fmt.Errorf("destination path %q does not exist or is not a valid Git repository", path), "", false
+		return "", false, fmt.Errorf("destination path %q does not exist or is not a valid Git repository", path)
 	}
 
 	// Safe Fail (D-05): abort checkout for this repository if there are any
@@ -85,26 +85,26 @@ func checkoutRepo(ctx context.Context, path, branch string, create bool) (err er
 	// by switching branches.
 	dirty, derr := hasUncommittedTrackedChanges(ctx, path)
 	if derr != nil {
-		return derr, "", false
+		return "", false, derr
 	}
 	if dirty {
-		return fmt.Errorf("local changes would be overwritten by checkout"), "", false
+		return "", false, fmt.Errorf("local changes would be overwritten by checkout")
 	}
 
 	if !create {
 		// Plain switch to an existing branch (D-07).
 		output, cerr := git.RunGitCommand(ctx, path, "checkout", branch)
 		if cerr != nil {
-			return cerr, string(output), false
+			return string(output), false, cerr
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	// -b flag set: check whether the branch already exists locally first,
 	// to implement the Safe Switch fallback (D-06).
 	exists, eerr := localBranchExists(ctx, path, branch)
 	if eerr != nil {
-		return eerr, "", false
+		return "", false, eerr
 	}
 
 	if exists {
@@ -115,16 +115,16 @@ func checkoutRepo(ctx context.Context, path, branch string, create bool) (err er
 		// checkmark, consistent with D-16's "safe warning" semantics.
 		output, cerr := git.RunGitCommand(ctx, path, "checkout", branch)
 		if cerr != nil {
-			return cerr, string(output), false
+			return string(output), false, cerr
 		}
-		return nil, fmt.Sprintf("branch %q already exists, switched to it safely", branch), true
+		return fmt.Sprintf("branch %q already exists, switched to it safely", branch), true, nil
 	}
 
 	output, cerr := git.RunGitCommand(ctx, path, "checkout", "-b", branch)
 	if cerr != nil {
-		return cerr, string(output), false
+		return string(output), false, cerr
 	}
-	return nil, "", false
+	return "", false, nil
 }
 
 // hasUncommittedTrackedChanges runs `git status --porcelain=v1` and reports

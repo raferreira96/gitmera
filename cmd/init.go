@@ -140,11 +140,11 @@ func NewWizard(in io.Reader, out io.Writer) *Wizard {
 // and returns the trimmed user response, or defaultValue if the response is
 // empty.
 func (w *Wizard) PromptString(promptText string, defaultValue string) (string, error) {
-	fmt.Fprint(w.out, promptText)
+	_, _ = fmt.Fprint(w.out, promptText)
 	if defaultValue != "" {
-		fmt.Fprintf(w.out, " [%s]", defaultValue)
+		_, _ = fmt.Fprintf(w.out, " [%s]", defaultValue)
 	}
-	fmt.Fprint(w.out, ": ")
+	_, _ = fmt.Fprint(w.out, ": ")
 
 	input, err := w.in.ReadString('\n')
 	if err != nil && err != io.EOF {
@@ -164,7 +164,7 @@ func (w *Wizard) PromptConfirm(promptText string, defaultYes bool) (bool, error)
 	if defaultYes {
 		suffix = " [Y/n]"
 	}
-	fmt.Fprintf(w.out, "%s%s: ", promptText, suffix)
+	_, _ = fmt.Fprintf(w.out, "%s%s: ", promptText, suffix)
 
 	input, err := w.in.ReadString('\n')
 	if err != nil && err != io.EOF {

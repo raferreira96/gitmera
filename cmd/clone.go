@@ -32,21 +32,21 @@ var cloneCmd = &cobra.Command{
 		}
 		defer setup.cancel()
 
-		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
+		action := func(workerCtx context.Context, task runner.RepoTask) (string, bool, error) {
 			// Validate destination path
 			alreadyCloned, err := git.ValidateDestination(task.Path)
 			if err != nil {
-				return err, "", false
+				return "", false, err
 			}
 			if alreadyCloned {
-				return nil, "", true
+				return "", true, nil
 			}
 
 			output, err := git.RunGitCommand(workerCtx, "", "clone", task.URI, task.Path)
 			if err != nil {
-				return err, string(output), false
+				return string(output), false, err
 			}
-			return nil, string(output), false
+			return string(output), false, nil
 		}
 
 		interactive := isInteractiveMode(cmd.OutOrStdout())

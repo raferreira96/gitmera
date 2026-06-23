@@ -30,7 +30,7 @@ type TaskResult struct {
 }
 
 // TaskActionFunc represents the callback executing the actual Git operation on a repository.
-type TaskActionFunc func(ctx context.Context, task RepoTask) (err error, stderr string, skipped bool)
+type TaskActionFunc func(ctx context.Context, task RepoTask) (stderr string, skipped bool, err error)
 
 // TaskEventType identifies the kind of lifecycle event emitted for a
 // repository task during concurrent execution.
@@ -118,7 +118,7 @@ func ExecuteTasks(
 			}
 
 			// Execute the action callback
-			err, stderr, skipped := action(workerCtx, task)
+			stderr, skipped, err := action(workerCtx, task)
 
 			res := TaskResult{
 				RepoName: task.Name,

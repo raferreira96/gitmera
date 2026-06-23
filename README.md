@@ -25,7 +25,7 @@ Gitmera allows you to execute Git commands across multiple repositories in paral
 - **Interactive TUI** — Real-time progress visualization with Bubble Tea
 - **Non-Interactive Mode** — CI/CD friendly with plain sequential logs
 - **Smart Configuration** — Auto-discovers `.gitmera.yaml` in the current directory
-- **Cross-Platform** — Supports macOS, Linux, and Windows
+- **Cross-Platform** — Supports macOS and Linux
 
 ## Installation
 
@@ -62,13 +62,17 @@ go install
 Create `.gitmera.yaml` in your working directory:
 
 ```yaml
-repositories:
-  - path: ./services/api
-    url: https://github.com/your-org/api
-  - path: ./services/web
-    url: https://github.com/your-org/web
-  - path: ./packages/core
-    url: https://github.com/your-org/core
+version: "1"
+projects:
+  api:
+    repo: https://github.com/your-org/api
+    path: ./api
+  web:
+    repo: https://github.com/your-org/web
+    path: ./web
+  mobile:
+    repo: https://github.com/your-org/mobile
+    path: ./mobile
 ```
 
 ### 2. Validate configuration
@@ -141,15 +145,17 @@ Gitmera uses YAML configuration. Default file names (in order of precedence):
 ### Example Configuration
 
 ```yaml
-repositories:
-  - path: ./api
-    url: https://github.com/org/api
-    branch: main
-  - path: ./web
-    url: https://github.com/org/web
-    branch: develop
-  - path: ./shared-lib
-    url: https://github.com/org/shared-lib
+version: "1"
+projects:
+  api:
+    repo: https://github.com/your-org/api
+    path: ./api
+  web:
+    repo: https://github.com/your-org/web
+    path: ./web
+  mobile:
+    repo: https://github.com/your-org/mobile
+    path: ./mobile
 ```
 
 ## Architecture
