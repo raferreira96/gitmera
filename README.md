@@ -145,15 +145,17 @@ Gitmera uses YAML configuration. Default file names (in order of precedence):
 ### Example Configuration
 
 ```yaml
-repositories:
-  - path: ./api
-    url: https://github.com/org/api
-    branch: main
-  - path: ./web
-    url: https://github.com/org/web
-    branch: develop
-  - path: ./shared-lib
-    url: https://github.com/org/shared-lib
+version: "1"
+projects:
+  api:
+    repo: https://github.com/your-org/api
+    path: ./api
+  web:
+    repo: https://github.com/your-org/web
+    path: ./web
+  mobile:
+    repo: https://github.com/your-org/mobile
+    path: ./mobile
 ```
 
 ## Architecture
