@@ -337,11 +337,11 @@ func TestRunSequentialFallback_FailFastCancellationNoDuplicateLines(t *testing.T
 		{Name: "fail_instant"},
 		{Name: "queued1"},
 	}
-	action := func(ctx context.Context, task runner.RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task runner.RepoTask) (string, bool, error) {
 		if task.Name == "fail_instant" {
-			return errors.New("instant error"), "", false
+			return "", false, errors.New("instant error")
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	eventChan := make(chan runner.TaskEvent, len(tasks)*2)
@@ -370,11 +370,11 @@ func TestOrchestrateExecution_NonInteractiveRunsFallback(t *testing.T) {
 	logger := ui.NewSafeLogger(&buf, true)
 
 	tasks := newTestTasks()
-	action := func(ctx context.Context, task runner.RepoTask) (error, string, bool) {
+	action := func(ctx context.Context, task runner.RepoTask) (string, bool, error) {
 		if task.Name == "web" {
-			return errors.New("simulated failure"), "stderr detail", false
+			return "stderr detail", false, errors.New("simulated failure")
 		}
-		return nil, "", false
+		return "", false, nil
 	}
 
 	results := ui.OrchestrateExecution(context.Background(), tasks, 3, false, time.Second, action, ui.ExecutionOptions{
@@ -415,8 +415,8 @@ func TestOrchestrateExecution_BufferSizeGuarantee(t *testing.T) {
 		tasks = append(tasks, runner.RepoTask{Name: "repo" + string(rune('a'+i))})
 	}
 
-	action := func(ctx context.Context, task runner.RepoTask) (error, string, bool) {
-		return nil, "", false
+	action := func(ctx context.Context, task runner.RepoTask) (string, bool, error) {
+		return "", false, nil
 	}
 
 	done := make(chan struct{})

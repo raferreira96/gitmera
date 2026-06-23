@@ -102,7 +102,7 @@ func TestUpdateCmd_PerformsUpdate(t *testing.T) {
 	var server *httptest.Server
 	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"tag_name": "v0.6.0", "assets": [
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v0.6.0", "assets": [
 			{"name": %q, "browser_download_url": %q},
 			{"name": "checksums.txt", "browser_download_url": %q}
 		]}`, assetName, server.URL+"/assets/"+assetName, server.URL+"/assets/checksums.txt")

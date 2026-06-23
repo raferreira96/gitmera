@@ -53,12 +53,12 @@ var statusCmd = &cobra.Command{
 		statuses := make(map[string]repoStatus, len(setup.tasks))
 		var statusMu sync.Mutex
 
-		action := func(workerCtx context.Context, task runner.RepoTask) (error, string, bool) {
+		action := func(workerCtx context.Context, task runner.RepoTask) (string, bool, error) {
 			rs := collectRepoStatus(workerCtx, task.Name, task.Path, statusFetch)
 			statusMu.Lock()
 			statuses[task.Name] = rs
 			statusMu.Unlock()
-			return nil, "", false
+			return "", false, nil
 		}
 
 		// Status always uses the keep-going policy: every repository should
@@ -281,7 +281,7 @@ func renderStatusTable(w io.Writer, statuses []repoStatus) {
 		sb.WriteString("\n")
 	}
 
-	fmt.Fprint(w, sb.String())
+	_, _ = fmt.Fprint(w, sb.String())
 }
 
 // renderMissingDetails writes a detail line for each Missing repository that
@@ -292,7 +292,7 @@ func renderStatusTable(w io.Writer, statuses []repoStatus) {
 func renderMissingDetails(w io.Writer, statuses []repoStatus) {
 	for _, rs := range statuses {
 		if rs.Status == "Missing" && rs.Err != nil {
-			fmt.Fprintf(w, "  ↳ %s: %s\n", rs.Name, rs.Err.Error())
+			_, _ = fmt.Fprintf(w, "  ↳ %s: %s\n", rs.Name, rs.Err.Error())
 		}
 	}
 }

@@ -39,13 +39,13 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("failed to open configuration file %q: %w", path, err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		if _, err := config.Load(f); err != nil {
 			return fmt.Errorf("invalid configuration file %q: %w", path, err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Found and validated configuration file: %s\n", path)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Found and validated configuration file: %s\n", path)
 		return nil
 	},
 }

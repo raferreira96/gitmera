@@ -20,7 +20,7 @@ func extractFromTarGz(data []byte, binaryName string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open gzip archive: %w", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 
 	tr := tar.NewReader(gz)
 	for {

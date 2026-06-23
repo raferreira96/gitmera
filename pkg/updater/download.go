@@ -22,7 +22,7 @@ func Download(ctx context.Context, client *http.Client, url string) ([]byte, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to download %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status %d downloading %s", resp.StatusCode, url)
