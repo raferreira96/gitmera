@@ -62,13 +62,17 @@ go install
 Create `.gitmera.yaml` in your working directory:
 
 ```yaml
-repositories:
-  - path: ./services/api
-    url: https://github.com/your-org/api
-  - path: ./services/web
-    url: https://github.com/your-org/web
-  - path: ./packages/core
-    url: https://github.com/your-org/core
+version: "1"
+projects:
+  api:
+    repo: https://github.com/your-org/api
+    path: ./api
+  web:
+    repo: https://github.com/your-org/web
+    path: ./web
+  mobile:
+    repo: https://github.com/your-org/mobile
+    path: ./mobile
 ```
 
 ### 2. Validate configuration
