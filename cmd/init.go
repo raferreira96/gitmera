@@ -176,3 +176,47 @@ func (w *Wizard) PromptConfirm(promptText string, defaultYes bool) (bool, error)
 	}
 	return input == "y" || input == "yes", nil
 }
+
+// promptProject prompts for a single project's name, Git repository URL,
+// and local subdirectory path. The name prompt retries on an empty value
+// or a name already present in existing, so two projects configured in
+// the same wizard run can never collide or silently overwrite each other.
+// defaultName seeds the name prompt's suggested default — pass "api" for
+// the wizard's first project and "" for every subsequent one, since
+// suggesting "api" again would just immediately collide with the first
+// entry's name.
+func promptProject(wizard *Wizard, logger *ui.SafeLogger, existing map[string]config.ProjectConfig, defaultName string) (name, repo, path string, err error) {
+	promptText := "Initial project name"
+	if defaultName == "" {
+		promptText = "Project name"
+	}
+
+	for {
+		name, err = wizard.PromptString(promptText, defaultName)
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to read project name: %w", err)
+		}
+		name = strings.TrimSpace(name)
+
+		if name == "" {
+			logger.Print("Project name cannot be empty.\n")
+			continue
+		}
+		if _, exists := existing[name]; exists {
+			logger.Print(fmt.Sprintf("Project name %q is already used. Choose a different name.\n", name))
+			continue
+		}
+		break
+	}
+
+	repo, err = wizard.PromptString("Git Repository URL", "")
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read repository URL: %w", err)
+	}
+	path, err = wizard.PromptString("Local subdirectory path", "./"+name)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read local subdirectory path: %w", err)
+	}
+
+	return name, repo, path, nil
+}
