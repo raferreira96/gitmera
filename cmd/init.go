@@ -72,22 +72,27 @@ var initCmd = &cobra.Command{
 		} else {
 			logger.Print("=== Gitmera Configuration Wizard ===\n\n")
 
-			name, err := wizard.PromptString("Initial project name", "api")
-			if err != nil {
-				return fmt.Errorf("failed to read project name: %w", err)
-			}
-			repo, err := wizard.PromptString("Git Repository URL", "")
-			if err != nil {
-				return fmt.Errorf("failed to read repository URL: %w", err)
-			}
-			path, err := wizard.PromptString("Local subdirectory path", "./"+name)
-			if err != nil {
-				return fmt.Errorf("failed to read local subdirectory path: %w", err)
-			}
+			defaultName := "api"
+			for {
+				name, repo, path, err := promptProject(wizard, logger, cfg.Projects, defaultName)
+				if err != nil {
+					return err
+				}
 
-			cfg.Projects[name] = config.ProjectConfig{
-				Repo: repo,
-				Path: path,
+				cfg.Projects[name] = config.ProjectConfig{
+					Repo: repo,
+					Path: path,
+				}
+				logger.LogSuccess(name, "Project added to configuration")
+				defaultName = ""
+
+				addAnother, err := wizard.PromptConfirm("Add another repository?", false)
+				if err != nil {
+					return fmt.Errorf("failed to read add-another confirmation: %w", err)
+				}
+				if !addAnother {
+					break
+				}
 			}
 		}
 
