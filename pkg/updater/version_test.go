@@ -29,6 +29,37 @@ func TestCompareVersions(t *testing.T) {
 	}
 }
 
+func TestCompareVersions_InvalidLatest(t *testing.T) {
+	// When latest is malformed, parseVersion returns nil → CompareVersions returns 0.
+	got := CompareVersions("1.0.0", "not-a-version")
+	if got != 0 {
+		t.Errorf("expected 0 for malformed latest, got %d", got)
+	}
+}
+
+func TestCompareVersions_InvalidCurrent(t *testing.T) {
+	// When current is neither "dev" nor a valid version, parseVersion returns nil → returns -1.
+	got := CompareVersions("bad-version", "v1.0.0")
+	if got != -1 {
+		t.Errorf("expected -1 for malformed current version, got %d", got)
+	}
+}
+
+func TestParseVersion_TwoParts(t *testing.T) {
+	// A two-part version like "1.2" is invalid (requires exactly 3 parts).
+	result := parseVersion("1.2")
+	if result != nil {
+		t.Errorf("expected nil for two-part version, got %v", result)
+	}
+}
+
+func TestParseVersion_NonNumericPart(t *testing.T) {
+	result := parseVersion("1.2.alpha")
+	if result != nil {
+		t.Errorf("expected nil for non-numeric patch, got %v", result)
+	}
+}
+
 func TestAssetName(t *testing.T) {
 	tests := []struct {
 		name    string

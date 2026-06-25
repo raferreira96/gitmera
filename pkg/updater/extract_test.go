@@ -42,6 +42,26 @@ func TestExtractBinary_TarGz(t *testing.T) {
 	}
 }
 
+func TestExtractBinary_InvalidGzip(t *testing.T) {
+	_, err := ExtractBinary([]byte("this is not gzip data"), "gitmera")
+	if err == nil {
+		t.Fatal("expected error for invalid gzip data, got nil")
+	}
+}
+
+func TestExtractBinary_ValidGzipBadTar(t *testing.T) {
+	// Build a valid gzip wrapping garbage (not a tar archive).
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, _ = gz.Write([]byte("this is not a tar archive at all"))
+	_ = gz.Close()
+
+	_, err := ExtractBinary(buf.Bytes(), "gitmera")
+	if err == nil {
+		t.Fatal("expected error for valid gzip but invalid tar content, got nil")
+	}
+}
+
 func TestExtractBinary_NotFound(t *testing.T) {
 	archive := buildTarGz(t, "some-other-file", []byte("irrelevant"))
 

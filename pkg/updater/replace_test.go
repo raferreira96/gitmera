@@ -35,6 +35,30 @@ func TestReplace(t *testing.T) {
 	}
 }
 
+func TestReplace_CannotCreateTempFile(t *testing.T) {
+	// Passing a target path whose parent directory does not exist triggers
+	// os.CreateTemp to fail.
+	err := Replace("/nonexistent/dir/gitmera", []byte("content"))
+	if err == nil {
+		t.Fatal("expected error when parent directory does not exist, got nil")
+	}
+}
+
+func TestReplace_RenameFails(t *testing.T) {
+	dir := t.TempDir()
+	// targetPath is an existing directory — os.Rename from a file to a
+	// directory fails with EISDIR on Linux/macOS, exercising the Rename error branch.
+	targetPath := filepath.Join(dir, "existing-dir")
+	if err := os.Mkdir(targetPath, 0755); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	err := Replace(targetPath, []byte("content"))
+	if err == nil {
+		t.Fatal("expected error when renaming to an existing directory, got nil")
+	}
+}
+
 func TestReplace_NoExistingBinary(t *testing.T) {
 	dir := t.TempDir()
 	targetPath := filepath.Join(dir, "gitmera")

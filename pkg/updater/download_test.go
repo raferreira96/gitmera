@@ -38,6 +38,60 @@ func TestDownload_NonOKStatus(t *testing.T) {
 	}
 }
 
+func TestDownload_InvalidURL(t *testing.T) {
+	// An invalid URL causes http.NewRequestWithContext to fail.
+	_, err := Download(context.Background(), &http.Client{}, "://invalid")
+	if err == nil {
+		t.Fatal("expected error for invalid URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to build request") {
+		t.Errorf("expected 'failed to build request', got: %v", err)
+	}
+}
+
+func TestDownload_BodyReadFails(t *testing.T) {
+	// Hijack the connection and close it after writing partial headers/body so
+	// that io.ReadAll returns an error instead of a complete response.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			http.Error(w, "hijacking not supported", http.StatusInternalServerError)
+			return
+		}
+		conn, buf, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\npartial")
+		_ = buf.Flush()
+		_ = conn.Close() // close before sending the remaining 993 bytes
+	}))
+	defer server.Close()
+
+	_, err := Download(context.Background(), server.Client(), server.URL)
+	if err == nil {
+		t.Fatal("expected error when response body read fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to read response body") {
+		t.Errorf("expected 'failed to read response body', got: %v", err)
+	}
+}
+
+func TestDownload_DialFails(t *testing.T) {
+	// Create a server, record its URL, then close it so connections are refused.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := server.URL
+	server.Close()
+
+	_, err := Download(context.Background(), http.DefaultClient, url)
+	if err == nil {
+		t.Fatal("expected error when server is unreachable, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to download") {
+		t.Errorf("expected 'failed to download' in error, got: %v", err)
+	}
+}
+
 func TestVerifyChecksum(t *testing.T) {
 	data := []byte("archive-bytes")
 	sum := sha256.Sum256(data)

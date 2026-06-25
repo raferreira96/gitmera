@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -63,6 +64,36 @@ func TestLogErrorBox_ContainsFailureDetails(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected error box output to contain %q, got: %q", want, out)
 		}
+	}
+}
+
+// TestIsInteractiveTerminal_NonFile verifies that a non-*os.File writer (such
+// as bytes.Buffer) always returns false, since it can never be a TTY.
+func TestIsInteractiveTerminal_NonFile(t *testing.T) {
+	var buf bytes.Buffer
+	if ui.IsInteractiveTerminal(&buf) {
+		t.Error("expected IsInteractiveTerminal=false for a non-*os.File writer")
+	}
+}
+
+// TestIsInteractiveTerminal_File exercises the *os.File branch. os.Stderr is a
+// real file descriptor but is not a TTY in a test process, so it must return false.
+func TestIsInteractiveTerminal_File(t *testing.T) {
+	if ui.IsInteractiveTerminal(os.Stderr) {
+		t.Error("expected IsInteractiveTerminal=false for os.Stderr in a non-TTY test process")
+	}
+}
+
+// TestNewSafeLogger_OsFileWriter exercises the isatty detection branch inside
+// NewSafeLogger when the writer is an *os.File. os.Stderr in a test process is
+// not a TTY, so color must still be disabled.
+func TestNewSafeLogger_OsFileWriter(t *testing.T) {
+	logger := ui.NewSafeLogger(os.Stderr, false)
+	if logger == nil {
+		t.Fatal("expected non-nil logger")
+	}
+	if logger.IsColorEnabled() {
+		t.Error("expected IsColorEnabled=false for os.Stderr in a non-TTY test process")
 	}
 }
 
