@@ -81,6 +81,106 @@ func TestValidateDestination(t *testing.T) {
 	}
 }
 
+func TestValidateDestination_EmptyPath(t *testing.T) {
+	skip, err := ValidateDestination("")
+	if err == nil {
+		t.Fatal("expected error for empty path, got nil")
+	}
+	if skip {
+		t.Error("expected skip=false for empty path")
+	}
+}
+
+func TestValidateDestination_GitDirIsFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "gitmera-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	// Create a directory with .git as a file (not a directory).
+	repoDir := filepath.Join(tmpDir, "fake-repo")
+	if err := os.Mkdir(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+	gitFile := filepath.Join(repoDir, ".git")
+	if err := os.WriteFile(gitFile, []byte("gitdir: ../real/.git"), 0644); err != nil {
+		t.Fatalf("failed to create .git file: %v", err)
+	}
+
+	skip, err := ValidateDestination(repoDir)
+	if err == nil {
+		t.Error("expected error when .git is a file, not a directory")
+	} else if !strings.Contains(err.Error(), ".git is not a directory") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+	if skip {
+		t.Error("expected skip=false when .git is a file")
+	}
+}
+
+func TestValidateDestination_GitDirSymlinkLoop(t *testing.T) {
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "repo")
+	if err := os.Mkdir(repoDir, 0755); err != nil {
+		t.Fatalf("failed to create repo dir: %v", err)
+	}
+	// Create a self-referential symlink at .git so os.Stat triggers ELOOP
+	// (not ENOENT), which is not os.IsNotExist.
+	gitPath := filepath.Join(repoDir, ".git")
+	if err := os.Symlink(gitPath, gitPath); err != nil {
+		t.Fatalf("failed to create circular symlink: %v", err)
+	}
+
+	skip, err := ValidateDestination(repoDir)
+	if err == nil {
+		t.Fatal("expected error for circular symlink at .git, got nil")
+	}
+	if skip {
+		t.Error("expected skip=false")
+	}
+}
+
+func TestValidateDestination_InvalidPathError(t *testing.T) {
+	// A path containing a null byte causes os.Stat to fail with EINVAL,
+	// which is NOT os.IsNotExist — this exercises the rare non-nil, non-IsNotExist
+	// error branch that returns false, err.
+	skip, err := ValidateDestination("/tmp/\x00invalid")
+	if err == nil {
+		t.Fatal("expected error for path with null byte, got nil")
+	}
+	if skip {
+		t.Error("expected skip=false for invalid path")
+	}
+}
+
+func TestSanitize_StripsSensitiveTokens(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{
+			input: "cloning https://secret-token-123@github.com/org/repo.git",
+			want:  "cloning https://[REDACTED]@github.com/org/repo.git",
+		},
+		{
+			input: "error: http://mytoken@gitlab.example.com/repo failed",
+			want:  "error: http://[REDACTED]@gitlab.example.com/repo failed",
+		},
+		{
+			input: "no token here",
+			want:  "no token here",
+		},
+	}
+
+	for _, tt := range tests {
+		got := Sanitize(tt.input)
+		if got != tt.want {
+			t.Errorf("Sanitize(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestRunGitCommand(t *testing.T) {
 	oldExec := execCommand
 	defer func() { execCommand = oldExec }()

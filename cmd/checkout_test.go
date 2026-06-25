@@ -283,6 +283,112 @@ func TestLocalBranchExists(t *testing.T) {
 	}
 }
 
+func TestCheckoutRepo_CreateBranchCheckoutFails(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "create-fail-repo", true)
+
+	withMockGitCheckout(t, map[string]mockCheckoutScenario{
+		"create-fail-repo": {
+			statusOutput:   "",
+			showRefExit:    1, // branch does not exist → git checkout -b
+			checkoutOutput: "error: could not create branch",
+			checkoutExit:   1,
+		},
+	})
+
+	_, _, err := checkoutRepo(context.Background(), dir, "new-feature", true)
+	if err == nil {
+		t.Fatal("expected error when branch creation (-b checkout) fails")
+	}
+}
+
+func TestCheckoutRepo_StatusCommandError(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "status-cmd-fail-repo", true)
+
+	withMockGitCheckout(t, map[string]mockCheckoutScenario{
+		"status-cmd-fail-repo": {
+			statusOutput: "",
+			statusExit:   1, // git status fails
+		},
+	})
+
+	_, _, err := checkoutRepo(context.Background(), dir, "main", false)
+	if err == nil {
+		t.Fatal("expected error when hasUncommittedTrackedChanges returns error via checkoutRepo")
+	}
+}
+
+func TestHasUncommittedTrackedChanges_EmptyLineIgnored(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "empty-line-repo", true)
+
+	// Status output with an internal empty line — only untracked files present.
+	withMockGitCheckout(t, map[string]mockCheckoutScenario{
+		"empty-line-repo": {
+			statusOutput: "?? file1.go\n\n?? file2.go\n",
+		},
+	})
+
+	dirty, err := hasUncommittedTrackedChanges(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if dirty {
+		t.Error("expected dirty=false when only untracked files (with empty lines) are present")
+	}
+}
+
+func TestCheckoutRepo_ValidateDestinationError(t *testing.T) {
+	base := t.TempDir()
+	// Create a file (not directory) at the repo path to trigger a ValidateDestination error.
+	repoPath := filepath.Join(base, "file-not-dir")
+	if err := os.WriteFile(repoPath, []byte("not a dir"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	_, _, err := checkoutRepo(context.Background(), repoPath, "main", false)
+	if err == nil {
+		t.Fatal("expected an error when destination is a file, not a git repo")
+	}
+}
+
+func TestCheckoutRepo_SafeSwitch_CheckoutFailure(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "safe-switch-fail-repo", true)
+
+	withMockGitCheckout(t, map[string]mockCheckoutScenario{
+		"safe-switch-fail-repo": {
+			statusOutput:   "",
+			showRefExit:    0, // branch already exists
+			checkoutOutput: "error: failed to switch",
+			checkoutExit:   1,
+		},
+	})
+
+	_, _, err := checkoutRepo(context.Background(), dir, "feature/x", true)
+	if err == nil {
+		t.Fatal("expected error when Safe Switch checkout command fails")
+	}
+}
+
+func TestHasUncommittedTrackedChanges_GitError(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "git-error-repo", true)
+
+	withMockGitCheckout(t, map[string]mockCheckoutScenario{
+		"git-error-repo": {
+			statusOutput: "",
+			statusExit:   128, // git status fails
+		},
+	})
+
+	_, err := hasUncommittedTrackedChanges(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when git status fails")
+	}
+}
+
 func TestLocalBranchExists_NotFound(t *testing.T) {
 	base := t.TempDir()
 	dir := makeRepoDir(t, base, "branch-missing-repo", true)

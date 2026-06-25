@@ -98,6 +98,93 @@ func TestValidate_RejectsRemoteHelperTransportSyntax(t *testing.T) {
 	}
 }
 
+func TestValidate_MissingVersion(t *testing.T) {
+	cfg := config.Config{
+		Projects: map[string]config.ProjectConfig{
+			"api": {Repo: "git@github.com:example/api.git", Path: "./api"},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing version, got nil")
+	}
+}
+
+func TestValidate_EmptyProjects(t *testing.T) {
+	cfg := config.Config{
+		Version:  "1",
+		Projects: map[string]config.ProjectConfig{},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty projects, got nil")
+	}
+}
+
+func TestValidate_EmptyRepoURI(t *testing.T) {
+	cfg := config.Config{
+		Version: "1",
+		Projects: map[string]config.ProjectConfig{
+			"api": {Repo: "", Path: "./api"},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty repo URI, got nil")
+	}
+}
+
+func TestValidate_EmptyLocalPath(t *testing.T) {
+	cfg := config.Config{
+		Version: "1",
+		Projects: map[string]config.ProjectConfig{
+			"api": {Repo: "git@github.com:example/api.git", Path: ""},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty local path, got nil")
+	}
+}
+
+func TestValidate_ValidGitURIFormats(t *testing.T) {
+	uris := []string{
+		"https://github.com/example/repo.git",
+		"http://gitlab.example.com/repo.git",
+		"git://github.com/repo.git",
+		"ssh://git@github.com/repo.git",
+		"file:///local/path/to/repo",
+		"git@github.com:example/repo.git",
+	}
+
+	for _, uri := range uris {
+		t.Run(uri, func(t *testing.T) {
+			cfg := config.Config{
+				Version: "1",
+				Projects: map[string]config.ProjectConfig{
+					"repo": {Repo: uri, Path: "./repo"},
+				},
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("expected valid URI %q to pass, got error: %v", uri, err)
+			}
+		})
+	}
+}
+
+func TestValidate_EmptyProjectName(t *testing.T) {
+	cfg := config.Config{
+		Version: "1",
+		Projects: map[string]config.ProjectConfig{
+			"": {Repo: "git@github.com:example/repo.git", Path: "./repo"},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty project name, got nil")
+	}
+}
+
 func TestLoad_ConcurrencyAndTimeout(t *testing.T) {
 	tests := []struct {
 		name        string

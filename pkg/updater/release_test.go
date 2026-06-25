@@ -51,6 +51,39 @@ func TestFetchLatestRelease_NonOKStatus(t *testing.T) {
 	}
 }
 
+func TestFetchLatestRelease_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{not valid json`))
+	}))
+	defer server.Close()
+
+	_, err := FetchLatestRelease(context.Background(), server.Client(), server.URL)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON response, got nil")
+	}
+}
+
+func TestFetchLatestRelease_InvalidURL(t *testing.T) {
+	// An invalid base URL causes the request build to fail.
+	_, err := FetchLatestRelease(context.Background(), &http.Client{}, "://invalid-url")
+	if err == nil {
+		t.Fatal("expected error for invalid base URL, got nil")
+	}
+}
+
+func TestFetchLatestRelease_DialFails(t *testing.T) {
+	// Create a server, record its URL, then close it so connections are refused.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	url := server.URL
+	server.Close()
+
+	_, err := FetchLatestRelease(context.Background(), http.DefaultClient, url)
+	if err == nil {
+		t.Fatal("expected error when server is unreachable, got nil")
+	}
+}
+
 func TestAssetDownloadURL(t *testing.T) {
 	release := Release{
 		TagName: "v0.2.0",

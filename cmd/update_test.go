@@ -145,6 +145,184 @@ func TestUpdateCmd_PerformsUpdate(t *testing.T) {
 	}
 }
 
+func TestDefaultUpdateTargetPath_ReturnsNonEmpty(t *testing.T) {
+	path, err := defaultUpdateTargetPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if path == "" {
+		t.Error("expected non-empty executable path")
+	}
+}
+
+func TestUpdateCmd_AssetNotFoundInRelease(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Release with no assets matching the current platform.
+		_, _ = w.Write([]byte(`{"tag_name": "v9.9.9", "assets": []}`))
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "gitmera")
+	withUpdateOverrides(t, server.URL, targetPath)
+	version = "v0.1.0" // current is older → would need to update
+
+	var out bytes.Buffer
+	updateCmd.SetOut(&out)
+
+	err := updateCmd.RunE(updateCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when release asset is not found, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to locate release asset") {
+		t.Errorf("expected 'failed to locate release asset', got: %v", err)
+	}
+}
+
+func TestUpdateCmd_ChecksumsMissing(t *testing.T) {
+	// Build the asset name matching the current runtime to ensure the first
+	// AssetDownloadURL call succeeds and the second (checksums.txt) fails.
+	assetName := updater.AssetName("v9.9.9", runtime.GOOS, runtime.GOARCH)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Release has the platform archive asset but no checksums.txt.
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v9.9.9", "assets": [{"name": %q, "browser_download_url": "http://example.com/asset"}]}`, assetName)
+	}))
+	defer server.Close()
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "gitmera")
+	withUpdateOverrides(t, server.URL, targetPath)
+	version = "v0.1.0"
+
+	var out bytes.Buffer
+	updateCmd.SetOut(&out)
+
+	err := updateCmd.RunE(updateCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when checksums.txt is missing from release, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to locate checksums") {
+		t.Errorf("expected 'failed to locate checksums', got: %v", err)
+	}
+}
+
+func TestUpdateCmd_ArchiveDownloadFails(t *testing.T) {
+	assetName := updater.AssetName("v9.9.9", runtime.GOOS, runtime.GOARCH)
+
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v9.9.9", "assets": [
+			{"name": %q, "browser_download_url": %q},
+			{"name": "checksums.txt", "browser_download_url": %q}
+		]}`, assetName, srv.URL+"/assets/"+assetName, srv.URL+"/assets/checksums.txt")
+	})
+	mux.HandleFunc("/assets/"+assetName, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "gitmera")
+	withUpdateOverrides(t, srv.URL, targetPath)
+	version = "v0.1.0"
+
+	var out bytes.Buffer
+	updateCmd.SetOut(&out)
+
+	err := updateCmd.RunE(updateCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when archive download fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to download") {
+		t.Errorf("expected 'failed to download', got: %v", err)
+	}
+}
+
+func TestUpdateCmd_ChecksumsDownloadFails(t *testing.T) {
+	assetName := updater.AssetName("v9.9.9", runtime.GOOS, runtime.GOARCH)
+	archive := buildTestArchive(t, "gitmera", []byte("binary-content"))
+
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v9.9.9", "assets": [
+			{"name": %q, "browser_download_url": %q},
+			{"name": "checksums.txt", "browser_download_url": %q}
+		]}`, assetName, srv.URL+"/assets/"+assetName, srv.URL+"/assets/checksums.txt")
+	})
+	mux.HandleFunc("/assets/"+assetName, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	})
+	mux.HandleFunc("/assets/checksums.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "gitmera")
+	withUpdateOverrides(t, srv.URL, targetPath)
+	version = "v0.1.0"
+
+	var out bytes.Buffer
+	updateCmd.SetOut(&out)
+
+	err := updateCmd.RunE(updateCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when checksums download fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to download checksums") {
+		t.Errorf("expected 'failed to download checksums', got: %v", err)
+	}
+}
+
+func TestUpdateCmd_ChecksumVerificationFails(t *testing.T) {
+	assetName := updater.AssetName("v9.9.9", runtime.GOOS, runtime.GOARCH)
+	archive := buildTestArchive(t, "gitmera", []byte("binary-content"))
+
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"tag_name": "v9.9.9", "assets": [
+			{"name": %q, "browser_download_url": %q},
+			{"name": "checksums.txt", "browser_download_url": %q}
+		]}`, assetName, srv.URL+"/assets/"+assetName, srv.URL+"/assets/checksums.txt")
+	})
+	mux.HandleFunc("/assets/"+assetName, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archive)
+	})
+	mux.HandleFunc("/assets/checksums.txt", func(w http.ResponseWriter, r *http.Request) {
+		// Return a checksum that does not match the archive.
+		_, _ = w.Write([]byte(strings.Repeat("0", 64) + "  " + assetName + "\n"))
+	})
+	srv = httptest.NewServer(mux)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "gitmera")
+	withUpdateOverrides(t, srv.URL, targetPath)
+	version = "v0.1.0"
+
+	var out bytes.Buffer
+	updateCmd.SetOut(&out)
+
+	err := updateCmd.RunE(updateCmd, nil)
+	if err == nil {
+		t.Fatal("expected error when checksum verification fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "checksum verification failed") {
+		t.Errorf("expected 'checksum verification failed', got: %v", err)
+	}
+}
+
 func TestUpdateCmd_FetchErrorIsWrapped(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
