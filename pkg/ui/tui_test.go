@@ -437,6 +437,62 @@ func TestOrchestrateExecution_BufferSizeGuarantee(t *testing.T) {
 	}
 }
 
+// TestOrchestrateExecution_EmptyTasks verifies that calling OrchestrateExecution
+// with an empty task list returns an empty results slice without deadlocking
+// (exercises the bufSize < 1 guard that ensures at least 1 channel slot).
+func TestOrchestrateExecution_EmptyTasks(t *testing.T) {
+	var buf bytes.Buffer
+	logger := ui.NewSafeLogger(&buf, true)
+
+	action := func(ctx context.Context, task runner.RepoTask) (string, bool, error) {
+		return "", false, nil
+	}
+
+	done := make(chan struct{})
+	var results []runner.TaskResult
+	go func() {
+		defer close(done)
+		results = ui.OrchestrateExecution(context.Background(), nil, 1, false, time.Second, action, ui.ExecutionOptions{
+			Interactive: false,
+			ActionLabel: "cloning",
+			Logger:      logger,
+		})
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("OrchestrateExecution with empty tasks did not complete in time")
+	}
+
+	if len(results) != 0 {
+		t.Errorf("expected 0 results for empty task list, got %d", len(results))
+	}
+}
+
+// TestOrchestrateExecution_Interactive_NonTTY exercises the Interactive=true
+// branch of OrchestrateExecution using an empty task list so the background
+// goroutine closes eventChan immediately. BubbleTea v2 receives eventClosedMsg
+// and calls tea.Quit, so the program exits without blocking on TTY input.
+func TestOrchestrateExecution_Interactive_NonTTY(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ui.OrchestrateExecution(context.Background(), nil, 1, false, time.Second,
+			func(ctx context.Context, task runner.RepoTask) (string, bool, error) {
+				return "", false, nil
+			},
+			ui.ExecutionOptions{Interactive: true, ActionLabel: "cloning"})
+	}()
+
+	select {
+	case <-done:
+		// Completed without deadlock.
+	case <-time.After(10 * time.Second):
+		t.Fatal("OrchestrateExecution with Interactive=true hung in non-TTY test environment")
+	}
+}
+
 // TestFlushStdin_DoesNotPanic verifies that calling FlushStdin does not panic or crash,
 // even when run in test environments where standard input might not be a real terminal/TTY.
 func TestFlushStdin_DoesNotPanic(t *testing.T) {

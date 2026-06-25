@@ -393,6 +393,153 @@ func TestRenderMissingDetails_SurfacesUnderlyingError(t *testing.T) {
 	}
 }
 
+func TestCollectRepoStatus_GitStatusFailure(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "fail-status-repo", true)
+
+	withMockGitStatus(t, map[string]mockStatusScenario{
+		"fail-status-repo": {
+			statusOutput: "",
+			statusExit:   128,
+		},
+	})
+
+	rs := collectRepoStatus(context.Background(), "fail-status-repo", dir, false)
+
+	if rs.Status != "Missing" {
+		t.Errorf("expected Status=Missing when git status fails, got %q", rs.Status)
+	}
+	if rs.Err == nil {
+		t.Error("expected non-nil Err when git status fails")
+	}
+}
+
+func TestCollectRepoStatus_UnexpectedStatusFormat(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "weird-format-repo", true)
+
+	withMockGitStatus(t, map[string]mockStatusScenario{
+		"weird-format-repo": {
+			statusOutput: "not a porcelain header\n",
+			statusExit:   0,
+		},
+	})
+
+	rs := collectRepoStatus(context.Background(), "weird-format-repo", dir, false)
+
+	if rs.Status != "Missing" {
+		t.Errorf("expected Status=Missing for unexpected output format, got %q", rs.Status)
+	}
+	if rs.Err == nil {
+		t.Error("expected non-nil Err for missing branch header")
+	}
+}
+
+func TestParseBranchLine_NoCommitsYet(t *testing.T) {
+	var rs repoStatus
+	parseBranchLine("## No commits yet on main", &rs)
+
+	if rs.Branch != "main" {
+		t.Errorf("expected branch 'main', got %q", rs.Branch)
+	}
+	if rs.HasUpstream {
+		t.Error("expected HasUpstream=false for no-commits branch")
+	}
+	if rs.Detached {
+		t.Error("expected Detached=false for no-commits branch")
+	}
+}
+
+func TestComputeAheadBehind_MalformedFieldCount(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "malformed-revlist-repo", true)
+
+	withMockGitStatus(t, map[string]mockStatusScenario{
+		"malformed-revlist-repo": {
+			statusOutput:  "## main...origin/main\n",
+			revListOutput: "singlevalue\n",
+			revListExit:   0,
+		},
+	})
+
+	rs := collectRepoStatus(context.Background(), "malformed-revlist-repo", dir, false)
+
+	if rs.HasUpstream {
+		t.Error("expected HasUpstream=false after malformed rev-list output (wrong field count)")
+	}
+}
+
+func TestComputeAheadBehind_NonNumericFields(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "nonnumeric-revlist-repo", true)
+
+	withMockGitStatus(t, map[string]mockStatusScenario{
+		"nonnumeric-revlist-repo": {
+			statusOutput:  "## main...origin/main\n",
+			revListOutput: "abc\tdef\n",
+			revListExit:   0,
+		},
+	})
+
+	rs := collectRepoStatus(context.Background(), "nonnumeric-revlist-repo", dir, false)
+
+	if rs.HasUpstream {
+		t.Error("expected HasUpstream=false after non-numeric rev-list output")
+	}
+}
+
+func TestRenderStatusCell_DefaultCase(t *testing.T) {
+	rs := repoStatus{Name: "odd", Status: "unknown-state"}
+	got := renderStatusCell(rs)
+	if got == "" {
+		t.Error("expected non-empty output for default status cell")
+	}
+	if !strings.Contains(got, "unknown-state") {
+		t.Errorf("expected output to contain the status value, got: %q", got)
+	}
+}
+
+func TestRenderAheadBehindCell_NoUpstream(t *testing.T) {
+	rs := repoStatus{Name: "no-upstream-repo", Branch: "main", Status: "Clean", HasUpstream: false}
+	got := renderAheadBehindCell(rs)
+	if !strings.Contains(got, "no upstream") {
+		t.Errorf("expected 'no upstream', got: %q", got)
+	}
+}
+
+func TestRenderAheadBehindCell_Diverged(t *testing.T) {
+	rs := repoStatus{
+		Name: "diverged", Status: "Clean", HasUpstream: true,
+		Ahead: 2, Behind: 3, Diverged: true,
+	}
+	got := renderAheadBehindCell(rs)
+	if !strings.Contains(got, "diverged") {
+		t.Errorf("expected 'diverged', got: %q", got)
+	}
+}
+
+func TestRenderAheadBehindCell_Behind(t *testing.T) {
+	rs := repoStatus{
+		Name: "behind", Status: "Clean", HasUpstream: true,
+		Ahead: 0, Behind: 2, Diverged: false, UpToDate: false,
+	}
+	got := renderAheadBehindCell(rs)
+	if !strings.Contains(got, "behind") {
+		t.Errorf("expected 'behind', got: %q", got)
+	}
+}
+
+func TestRenderAheadBehindCell_UpToDate(t *testing.T) {
+	rs := repoStatus{
+		Name: "sync", Status: "Clean", HasUpstream: true,
+		Ahead: 0, Behind: 0, Diverged: false, UpToDate: true,
+	}
+	got := renderAheadBehindCell(rs)
+	if !strings.Contains(got, "up-to-date") {
+		t.Errorf("expected 'up-to-date', got: %q", got)
+	}
+}
+
 func TestPadRight_UsesVisualWidth(t *testing.T) {
 	// Confirms padRight measures visual (ANSI-aware) width via
 	// lipgloss.Width rather than raw byte length, so styled strings still

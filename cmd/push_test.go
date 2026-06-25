@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"gitmera/pkg/git"
@@ -339,6 +340,165 @@ func TestHasUpstreamConfigured(t *testing.T) {
 	}
 	if !has {
 		t.Error("expected hasUpstream=true when rev-parse exits 0")
+	}
+}
+
+func TestCurrentBranch_EmptyOutputFails(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "empty-branch-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"empty-branch-repo": {
+			branchOutput: "\n", // empty after TrimSpace
+		},
+	})
+
+	_, err := currentBranch(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error for empty branch output")
+	}
+}
+
+func TestAheadBehindCount_RevListError(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "revlist-error-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"revlist-error-repo": {
+			revListOutput: "",
+			revListExit:   128,
+		},
+	})
+
+	_, _, err := aheadBehindCount(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when rev-list command fails")
+	}
+}
+
+func TestAheadBehindCount_MalformedOutput(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "malformed-ahead-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"malformed-ahead-repo": {
+			revListOutput: "onlyone\n",
+			revListExit:   0,
+		},
+	})
+
+	_, _, err := aheadBehindCount(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error for malformed rev-list output")
+	}
+	if !strings.Contains(err.Error(), "unexpected rev-list output") {
+		t.Errorf("expected 'unexpected rev-list output', got: %v", err)
+	}
+}
+
+func TestAheadBehindCount_NonNumericFields(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "nonnumeric-ahead-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"nonnumeric-ahead-repo": {
+			revListOutput: "abc\tdef\n",
+			revListExit:   0,
+		},
+	})
+
+	_, _, err := aheadBehindCount(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error for non-numeric rev-list output")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestPushRepo_ValidateDestinationError(t *testing.T) {
+	base := t.TempDir()
+	// A file (not a directory) will cause ValidateDestination to return an error.
+	repoPath := filepath.Join(base, "file-not-dir")
+	if err := os.WriteFile(repoPath, []byte("not a dir"), 0644); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+
+	_, _, err := pushRepo(context.Background(), repoPath)
+	if err == nil {
+		t.Fatal("expected an error when destination is a file, not a git repo")
+	}
+}
+
+func TestPushRepo_SetUpstreamPushFails(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "set-upstream-fail-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"set-upstream-fail-repo": {
+			branchOutput: "feature/new\n",
+			upstreamExit: 128, // no upstream
+			pushOutput:   "remote: push rejected",
+			pushExit:     1,
+		},
+	})
+
+	_, _, err := pushRepo(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when --set-upstream push fails")
+	}
+}
+
+func TestPushRepo_AheadBehindCountError(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "ahead-err-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"ahead-err-repo": {
+			branchOutput:  "main\n",
+			upstreamExit:  0,  // has upstream
+			revListOutput: "",
+			revListExit:   1, // rev-list fails
+		},
+	})
+
+	_, _, err := pushRepo(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when aheadBehindCount fails inside pushRepo")
+	}
+}
+
+func TestCurrentBranch_CommandFails(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "branch-fail-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"branch-fail-repo": {
+			branchOutput: "",
+			branchExit:   1,
+		},
+	})
+
+	_, err := currentBranch(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when rev-parse command exits non-zero")
+	}
+}
+
+func TestPushRepo_CurrentBranchError(t *testing.T) {
+	base := t.TempDir()
+	dir := makeRepoDir(t, base, "branch-err-push-repo", true)
+
+	withMockGitPush(t, map[string]mockPushScenario{
+		"branch-err-push-repo": {
+			branchOutput: "",
+			branchExit:   1,
+		},
+	})
+
+	_, _, err := pushRepo(context.Background(), dir)
+	if err == nil {
+		t.Fatal("expected error when currentBranch fails inside pushRepo")
 	}
 }
 
