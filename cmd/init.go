@@ -214,9 +214,15 @@ func promptProject(wizard *Wizard, logger *ui.SafeLogger, existing map[string]co
 		break
 	}
 
-	repo, err = wizard.PromptString("Git Repository URL", "")
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to read repository URL: %w", err)
+	for {
+		repo, err = wizard.PromptString("Git Repository URL", "")
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to read repository URL: %w", err)
+		}
+		if repo != "" {
+			break
+		}
+		logger.Print("Git Repository URL cannot be empty.\n")
 	}
 	path, err = wizard.PromptString("Local subdirectory path", "./"+name)
 	if err != nil {

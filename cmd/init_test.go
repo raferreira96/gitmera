@@ -248,6 +248,25 @@ func TestPromptProject_RetriesOnDuplicateName(t *testing.T) {
 	}
 }
 
+func TestPromptProject_RetriesOnEmptyRepo(t *testing.T) {
+	// First repo line is blank (retries), second provides a valid URL.
+	in := strings.NewReader("api\n\ngit@github.com:example/api.git\n./api\n")
+	var out strings.Builder
+	wizard := NewWizard(in, &out)
+	logger := ui.NewSafeLogger(&out, true)
+
+	_, repo, _, err := promptProject(wizard, logger, map[string]config.ProjectConfig{}, "api")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo != "git@github.com:example/api.git" {
+		t.Errorf("expected repo %q after retry, got %q", "git@github.com:example/api.git", repo)
+	}
+	if !strings.Contains(out.String(), "cannot be empty") {
+		t.Errorf("expected an empty-repo retry message, got output: %q", out.String())
+	}
+}
+
 // withInitTestState points the package-level flag vars consumed by
 // initCmd.RunE at a fresh, isolated state for the duration of the test,
 // restoring the previous values afterward.
