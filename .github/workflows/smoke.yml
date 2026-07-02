@@ -21,4 +21,4 @@ jobs:
           go-version-file: go.mod
 
       - name: Run smoke tests
-        run: ./scripts/smoke-init-multi.sh
+        run: bash ./scripts/smoke-init-multi.sh
